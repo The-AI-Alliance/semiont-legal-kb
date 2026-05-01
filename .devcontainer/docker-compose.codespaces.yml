@@ -1,0 +1,18 @@
+# Codespace overrides for backend.yml — sized for the 4-core/16GB machine type
+# declared in devcontainer.json. The anthropic config doesn't load a local
+# inference model, so Ollama only needs room for nomic-embed-text (~270MB).
+#
+# Used via:
+#   docker compose -f .semiont/compose/backend.yml \
+#                  -f .devcontainer/docker-compose.codespaces.yml \
+#                  --profile observe up -d --wait
+
+services:
+  ollama:
+    mem_limit: 4g
+  backend:
+    mem_limit: 2g
+  worker:
+    mem_limit: 2g
+  smelter:
+    mem_limit: 1g

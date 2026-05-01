@@ -1,0 +1,26 @@
+FROM node:24-alpine
+
+RUN apk add --no-cache curl
+ARG NPM_REGISTRY=https://registry.npmjs.org
+RUN npm config set registry $NPM_REGISTRY && \
+    npm install -g @semiont/jobs && \
+    npm cache clean --force
+
+RUN addgroup --system --gid 1001 nodejs && \
+    adduser --system --uid 1001 semiont
+
+WORKDIR /kb
+RUN chown semiont:nodejs /kb
+
+USER semiont
+
+ARG SEMIONT_CONFIG=.semiont/containers/semiontconfig/ollama-gemma.toml
+COPY --chown=semiont:nodejs ${SEMIONT_CONFIG} /home/semiont/.semiontconfig
+
+ENV NODE_ENV=production
+EXPOSE 9090
+
+HEALTHCHECK --interval=15s --timeout=5s --start-period=10s --retries=3 \
+  CMD curl -f http://localhost:9090/health || exit 1
+
+CMD ["node", "/usr/local/lib/node_modules/@semiont/jobs/dist/worker-main.js"]

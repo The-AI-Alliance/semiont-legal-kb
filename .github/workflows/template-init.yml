@@ -1,0 +1,56 @@
+name: template-init
+
+# Runs once when a new repo is created from this template. Rewrites
+# owner/repo references in the README so badges, codespace URLs, and other
+# links point at the fork. Then deletes itself.
+#
+# The `if` guard skips the original template repo — only forks ever
+# actually run the body.
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  init:
+    if: github.repository != 'The-AI-Alliance/semiont-template-kb'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Rewrite repo references and delete this workflow
+        env:
+          REPO: ${{ github.repository }}
+          OWNER: ${{ github.repository_owner }}
+        run: |
+          set -euo pipefail
+          NAME="${REPO##*/}"
+
+          # 1. Owner/repo references in README badge URLs and links.
+          sed -i "s|The-AI-Alliance/semiont-template-kb|${REPO}|g" README.md
+
+          # 2. The "Use this template" link uses separate URL params; rewrite
+          #    those too. Escape & in the replacement (sed treats it specially).
+          sed -i "s|template_name=semiont-template-kb&template_owner=The-AI-Alliance|template_name=${NAME}\&template_owner=${OWNER}|g" README.md
+
+          # 3. Drop the "Use this template" badge line — no longer relevant.
+          sed -i '/!\[Use this template\]/d' README.md
+
+          # 4. Drop the "use this template first" guidance paragraph in the
+          #    Codespaces section — the fork already came from the template.
+          sed -i '/For a KB you intend to keep, \*\*\[use this template\]/d' README.md
+
+          # 5. Self-destruct so this workflow doesn't run again.
+          git rm .github/workflows/template-init.yml
+
+      - name: Commit and push
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A
+          git commit -m "chore: parameterize template for ${{ github.repository }}"
+          git push

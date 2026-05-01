@@ -1,0 +1,40 @@
+{
+  "name": "Semiont Template KB",
+  "image": "mcr.microsoft.com/devcontainers/base:ubuntu-24.04",
+
+  "features": {
+    "ghcr.io/devcontainers/features/docker-in-docker:2": {},
+    "ghcr.io/devcontainers/features/common-utils:2": {}
+  },
+
+  "hostRequirements": {
+    "cpus": 4,
+    "memory": "16gb"
+  },
+
+  "containerEnv": {
+    "SEMIONT_CONFIG": ".semiont/containers/semiontconfig/anthropic.toml",
+    "OTEL_EXPORTER_OTLP_ENDPOINT": "http://jaeger:4318",
+    "ANTHROPIC_API_KEY": "${localEnv:ANTHROPIC_API_KEY}"
+  },
+
+  "postCreateCommand": ".devcontainer/post-create.sh",
+  "postStartCommand": ".devcontainer/post-start.sh",
+
+  "forwardPorts": [4000, 16686, 7474, 9090, 9091],
+  "portsAttributes": {
+    "4000": { "label": "Backend API", "onAutoForward": "notify" },
+    "16686": { "label": "Jaeger UI", "onAutoForward": "notify" },
+    "7474": { "label": "Neo4j Browser", "onAutoForward": "silent" },
+    "9090": { "label": "Worker health", "onAutoForward": "silent" },
+    "9091": { "label": "Smelter health", "onAutoForward": "silent" }
+  },
+
+  "customizations": {
+    "vscode": {
+      "extensions": [
+        "ms-azuretools.vscode-docker"
+      ]
+    }
+  }
+}
