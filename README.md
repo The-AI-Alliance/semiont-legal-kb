@@ -1,9 +1,8 @@
 # Semiont Template Knowledge Base
 
-[![Lint](https://github.com/The-AI-Alliance/semiont-template-kb/actions/workflows/lint.yml/badge.svg?branch=main)](https://github.com/The-AI-Alliance/semiont-template-kb/actions/workflows/lint.yml?query=branch%3Amain)
-[![Build](https://github.com/The-AI-Alliance/semiont-template-kb/actions/workflows/build.yml/badge.svg?branch=main)](https://github.com/The-AI-Alliance/semiont-template-kb/actions/workflows/build.yml?query=branch%3Amain)
-[![License](https://img.shields.io/github/license/The-AI-Alliance/semiont-template-kb)](https://github.com/The-AI-Alliance/semiont-template-kb/blob/main/LICENSE)
-[![Use this template](https://img.shields.io/badge/use%20this-template-2ea44f?logo=github)](https://github.com/new?template_name=semiont-template-kb&template_owner=The-AI-Alliance)
+[![Lint](https://github.com/AIAlliance/semiont-legal-kb/actions/workflows/lint.yml/badge.svg?branch=main)](https://github.com/AIAlliance/semiont-legal-kb/actions/workflows/lint.yml?query=branch%3Amain)
+[![Build](https://github.com/AIAlliance/semiont-legal-kb/actions/workflows/build.yml/badge.svg?branch=main)](https://github.com/AIAlliance/semiont-legal-kb/actions/workflows/build.yml?query=branch%3Amain)
+[![License](https://img.shields.io/github/license/AIAlliance/semiont-legal-kb)](https://github.com/AIAlliance/semiont-legal-kb/blob/main/LICENSE)
 
 A starting point for creating a new [Semiont](https://github.com/The-AI-Alliance/semiont) knowledge base. Clone this repo, add your documents, and run the start script to get a fully functional semantic wiki backed by AI-powered annotation, linking, and generation.
 
@@ -22,7 +21,7 @@ No npm or Node.js installation required — everything runs in containers.
 ### Start the backend
 
 ```bash
-git clone https://github.com/The-AI-Alliance/semiont-template-kb.git my-kb
+git clone https://github.com/AIAlliance/semiont-legal-kb.git my-kb
 cd my-kb
 .semiont/scripts/start.sh --email admin@example.com --password password
 ```
@@ -42,9 +41,8 @@ Start a Semiont browser by [running the container or desktop app](https://github
 
 ## Quick Start: Codespaces
 
-For a KB you intend to keep, **[use this template](https://github.com/new?template_name=semiont-template-kb&template_owner=The-AI-Alliance) first to create your own repo**, then launch a Codespace from there — that gives you write access for committing your annotations and event streams. The badge below launches on this template directly; useful for trying out but read-only.
 
-[![Open in GitHub Codespaces](https://github.com/codespaces/badge.svg)](https://github.com/codespaces/new/The-AI-Alliance/semiont-template-kb)
+[![Open in GitHub Codespaces](https://github.com/codespaces/badge.svg)](https://github.com/codespaces/new/AIAlliance/semiont-legal-kb)
 
 > **Before launching:** add `ANTHROPIC_API_KEY` as a [user secret](https://github.com/settings/codespaces) with your repo selected. Otherwise the backend comes up but inference is non-functional until you add the secret and rebuild the container.
 
