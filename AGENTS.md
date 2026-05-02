@@ -17,7 +17,7 @@ If you're an AI assistant working in this repo, this file is your orientation. T
 
 | Skill | What it does | New SDK verbs |
 |---|---|---|
-| [`ingest-corpus`](skills/ingest-corpus/) | Walk the repo, create one resource per file | `yield.resource` |
+| [`ingest-corpus`](skills/ingest-corpus/) | Walk the repo, declare the KB's entity-type vocabulary, create one resource per file | `frame.addEntityTypes`, `yield.resource` |
 | [`mark-named-entities`](skills/mark-named-entities/) | Detect Person, Organization, Address, Date, MonetaryValue, LegalSection, LegalDocument, LegalTerm spans | `mark.assist` (linking) |
 | [`mark-descriptive-references`](skills/mark-descriptive-references/) | Detect anaphoric mentions ("the landlord", "the vendor", "the owner of …") | `mark.assist` (linking + descriptive references) |
 | [`assess-contract-risks`](skills/assess-contract-risks/) | Flag risk-prone clauses (asymmetric provisions, vague language, missing definitions) | `mark.assist` (assessing) |

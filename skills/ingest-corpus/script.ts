@@ -15,6 +15,46 @@ import { SemiontClient } from '@semiont/sdk';
 import { discoverCorpus, readForUpload } from '../../src/files.js';
 import { confirm, close as closeInteractive } from '../../src/interactive.js';
 
+/**
+ * The full entity-type vocabulary this KB uses across all eleven skills.
+ * Declared via `frame.addEntityTypes` once on each ingest run — idempotent,
+ * so re-runs are harmless. This is what makes `browse.entityTypes()` return
+ * a coherent published vocabulary.
+ */
+const KB_ENTITY_TYPES = [
+  // Document types from src/files.ts filename heuristics
+  'Contract',
+  'Amendment',
+  'Exhibit',
+  'Letter',
+  'SideLetter',
+  'Email',
+  'Memo',
+  'Policy',
+  'CorporateRecord',
+  'LegalOpinion',
+  'LegalDocument',
+  // Curated-context markers
+  'LegalContext',
+  'Curated',
+  // mark-named-entities entity types
+  'Person',
+  'Organization',
+  'Address',
+  'Date',
+  'MonetaryValue',
+  'LegalSection',
+  'LegalTerm',
+  // Synthesized aggregates
+  'Party',
+  'Obligation',
+  'Investigation',
+  'Checklist',
+  'VersionDelta',
+  'Relationship',
+  'Aggregate',
+];
+
 async function main(): Promise<void> {
   const repoRoot = process.cwd();
   const files = discoverCorpus(repoRoot);
@@ -57,6 +97,10 @@ async function main(): Promise<void> {
     email: process.env.SEMIONT_USER_EMAIL!,
     password: process.env.SEMIONT_USER_PASSWORD!,
   });
+
+  // Declare this KB's entity-type vocabulary via frame. Idempotent.
+  console.log(`Declaring ${KB_ENTITY_TYPES.length} entity types via frame...`);
+  await semiont.frame.addEntityTypes(KB_ENTITY_TYPES);
 
   let created = 0;
   let failed = 0;

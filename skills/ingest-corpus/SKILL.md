@@ -27,6 +27,7 @@ Filename heuristics (case-insensitive substring match): `agreement` / `msa` / `c
 
 ## SDK verbs
 
+- `frame.addEntityTypes` — declares this KB's full entity-type vocabulary on every run (idempotent). The constant `KB_ENTITY_TYPES` at the top of `script.ts` is the published vocabulary.
 - `yield.resource` — one call per discovered file
 
 ## Tier-3 interactive checkpoint
