@@ -9,18 +9,6 @@
  *
  * Pass 2: mark.assist relationship-extraction pass over the corpus.
  *
- * KNOWN ISSUE — entity-type loss on synthesized resources:
- *   The yield.fromAnnotation call below passes `entityTypes: ['Party',
- *   partyType]`, but @semiont/sdk's GenerationOptions doesn't declare an
- *   entityTypes field (see namespaces/types.ts:GenerationOptions and the
- *   bus payload in yield.ts:188-198). The field is silently dropped —
- *   synthesized Party resources don't get the 'Party' entity-type stamp,
- *   so `browse.resources({ entityType: 'Party' })` misses them. The
- *   bound annotations still carry Person/Organization tags, so
- *   annotation-side queries work. Upstream fix: add `entityTypes` to
- *   the SDK's GenerationOptions and thread it through the bus payload
- *   to the worker (which already accepts it via GenerationParams).
- *
  * Usage: tsx skills/build-party-graph/script.ts [--interactive]
  */
 
