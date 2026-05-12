@@ -154,7 +154,13 @@ async function main(): Promise<void> {
       continue;
     }
     const key = a.text.toLowerCase().trim();
-    if (!key) continue;
+    if (!key) {
+      console.warn(
+        `  skipping annotation ${a.annId} on ${a.rId} — no TextQuoteSelector ` +
+          `(tags: ${a.tags.join(', ')}). Cluster key would be empty.`,
+      );
+      continue;
+    }
     if (!clusters.has(key)) clusters.set(key, []);
     clusters.get(key)!.push(a);
   }
