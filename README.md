@@ -22,8 +22,7 @@ This repo ships eleven skills that build a layered legal-review KB on top of the
 | Skill | What it does |
 |---|---|
 | [`ingest-corpus`](skills/ingest-corpus/SKILL.md) | Walk the repo's legal-document corpus (markdown and PDF); create one resource per file. |
-| [`mark-named-entities`](skills/mark-named-entities/SKILL.md) | Detect formally-named entity spans — Person, Organization, Address, Date, MonetaryValue, LegalSection, LegalTerm. |
-| [`mark-descriptive-references`](skills/mark-descriptive-references/SKILL.md) | Detect anaphoric mentions ("the landlord", "the vendor", "the owner of the property"). |
+| [`mark-named-entities`](skills/mark-named-entities/SKILL.md) | Detect entity spans — Person, Organization, Address, Date, MonetaryValue, LegalSection, LegalTerm — surfacing both formal mentions and descriptive references ("the landlord", "the vendor", "the owner of the property"). |
 | [`assess-contract-risks`](skills/assess-contract-risks/SKILL.md) | Flag risk-prone clauses — open issues, missing definitions, vague language, asymmetric provisions. |
 | [`comment-action-items`](skills/comment-action-items/SKILL.md) | Surface action items, deadlines, and required follow-ups across the corpus. |
 | [`resolve-descriptive-references`](skills/resolve-descriptive-references/SKILL.md) | Resolve descriptive references to Party resources; synthesize an Investigation resource documenting the audit trail. |

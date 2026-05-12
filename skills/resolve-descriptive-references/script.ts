@@ -108,7 +108,7 @@ async function main(): Promise<void> {
 
   if (descriptive.length === 0) {
     console.log(
-      'No descriptive-reference annotations found. Run skills/mark-descriptive-references/script.ts first.',
+      'No descriptive-reference annotations found. Run skills/mark-named-entities/script.ts first (with the default INCLUDE_DESCRIPTIVE_REFERENCES=1).',
     );
     semiont.dispose();
     closeInteractive();
@@ -133,7 +133,7 @@ async function main(): Promise<void> {
   let skipped = 0;
 
   for (const a of descriptive) {
-    const gather = await semiont.gather.annotation(a.annId, a.rId, { contextWindow: 1500 });
+    const gather = await semiont.gather.annotation(a.rId, a.annId, { contextWindow: 1500 });
     const context = gather.response as GatheredContext;
     const matchResult = await semiont.match.search(a.rId, a.annId, context, {
       limit: 5,
@@ -253,7 +253,7 @@ async function main(): Promise<void> {
     '',
     '## Methodology',
     '',
-    'For each descriptive-reference annotation produced by `mark-descriptive-references` (skill 3): ' +
+    'For each descriptive-reference annotation produced by `mark-named-entities` (with `includeDescriptiveReferences: true`): ' +
       '`gather.annotation` collected the surrounding paragraph as context; `match.search` returned the top 5 candidate ' +
       'resources scored against that context; if the top score met the threshold, `bind.body` linked the annotation to ' +
       'the candidate and a `mark.annotation` (motivation: commenting) recorded *why* — top candidate, score, and the ' +

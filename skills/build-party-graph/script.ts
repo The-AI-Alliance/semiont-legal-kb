@@ -14,17 +14,31 @@
 
 import {
   SemiontClient,
+  entityType,
   resourceId as ridBrand,
   type AnnotationId,
   type GatheredContext,
   type ResourceId,
 } from '@semiont/sdk';
 import { confirm, isInteractive, close as closeInteractive } from '../../src/interactive.js';
+import { createdCount } from '../../src/mark-result.js';
 
 const MATCH_THRESHOLD = Number(process.env.MATCH_THRESHOLD ?? 30);
 const SKIP_RELATIONSHIP_PASS = process.env.SKIP_RELATIONSHIP_PASS === '1';
 
 const PARTY_ENTITY_TYPES = new Set(['Person', 'Organization']);
+
+// mark.assist with motivation 'linking' requires a non-empty entityTypes
+// array (SDK validation). Pass 2's relationship-extraction tagging uses the
+// standard legal entity-type list; override with the RELATIONSHIP_ENTITY_TYPES
+// env var if you want to scope the relationship pass to a different
+// vocabulary.
+const RELATIONSHIP_ENTITY_TYPES = (
+  process.env.RELATIONSHIP_ENTITY_TYPES ??
+  'Person,Organization,Address,Date,MonetaryValue,LegalSection,LegalDocument,LegalTerm'
+)
+  .split(',')
+  .map((t) => entityType(t.trim()));
 
 const RELATIONSHIP_INSTRUCTIONS = `
 For pairs of named parties (Person ↔ Person, Person ↔ Organization, or Organization ↔ Organization)
@@ -159,7 +173,7 @@ async function main(): Promise<void> {
     for (const [_, anns] of clusters) {
       const sample = anns[0];
 
-      const gather = await semiont.gather.annotation(sample.annId, sample.rId, {
+      const gather = await semiont.gather.annotation(sample.rId, sample.annId, {
         contextWindow: 1500,
       });
       const context = gather.response as GatheredContext;
@@ -252,9 +266,10 @@ async function main(): Promise<void> {
   for (const r of markdownResources) {
     const rId = ridBrand(r['@id']);
     const progress = await semiont.mark.assist(rId, 'linking', {
+      entityTypes: RELATIONSHIP_ENTITY_TYPES,
       instructions: RELATIONSHIP_INSTRUCTIONS,
     });
-    const n = progress.progress?.createdCount ?? 0;
+    const n = createdCount(progress);
     totalRel += n;
     console.log(`  ${rId}: ${n} relationship annotations`);
   }

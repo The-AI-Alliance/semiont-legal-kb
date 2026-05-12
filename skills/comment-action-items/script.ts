@@ -11,6 +11,7 @@
 
 import { SemiontClient, resourceId as ridBrand, type ResourceId } from '@semiont/sdk';
 import { confirm, close as closeInteractive } from '../../src/interactive.js';
+import { createdCount } from '../../src/mark-result.js';
 
 const DEFAULT_INSTRUCTIONS = `
 For each substantive paragraph, where appropriate, add a commenting annotation that captures one of:
@@ -64,7 +65,7 @@ async function main(): Promise<void> {
     return;
   }
 
-  const firstLine = INSTRUCTIONS.split('\n')[0];
+  const firstLine = INSTRUCTIONS.split('\n').find((l) => l.trim().length > 0) ?? '';
   console.log(`Will run mark.assist (motivation: commenting) against ${targets.length} resource(s).`);
   console.log(`  Focus: ${firstLine}`);
   const proceed = await confirm('Proceed?', true);
@@ -78,7 +79,7 @@ async function main(): Promise<void> {
   let totalCreated = 0;
   for (const rId of targets) {
     const progress = await semiont.mark.assist(rId, 'commenting', { instructions: INSTRUCTIONS });
-    const n = progress.progress?.createdCount ?? 0;
+    const n = createdCount(progress);
     totalCreated += n;
     console.log(`  ${rId}: ${n} action items`);
   }

@@ -37,7 +37,7 @@ Before run: prints reference count + threshold, asks `confirm`. Per borderline m
 
 ## Run it
 
-**Prerequisites: `mark-descriptive-references` (skill 3) and `build-party-graph` (skill 9) have been run.** Skill 9 produces the Party resources this skill matches against.
+**Prerequisites: `mark-named-entities` (with the default `INCLUDE_DESCRIPTIVE_REFERENCES=1`) and `build-party-graph` have been run.** `mark-named-entities` produces the descriptive-reference annotations this skill resolves; `build-party-graph` produces the Party resources it matches against.
 
 ```bash
 HOST_ADDR=$(container run --rm node:24-alpine sh -c "ip route | awk '/default/{print \$3}'" 2>/dev/null | tr -d '[:space:]')

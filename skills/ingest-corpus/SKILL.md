@@ -57,7 +57,7 @@ For Docker Desktop / Podman on macOS, replace the probe with `SEMIONT_API_URL=ht
 
 ## Output
 
-Per-file resource id and entity types. Note these — downstream skills (`mark-named-entities`, `mark-descriptive-references`, etc.) operate against the resource set this skill creates.
+Per-file resource id and entity types. Note these — downstream skills (`mark-named-entities`, `assess-contract-risks`, `comment-action-items`, etc.) operate against the resource set this skill creates.
 
 ## Guidance for the AI assistant
 

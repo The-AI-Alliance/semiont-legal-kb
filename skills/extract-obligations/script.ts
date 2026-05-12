@@ -16,6 +16,7 @@ import {
   type ResourceId,
 } from '@semiont/sdk';
 import { confirm, isInteractive, close as closeInteractive } from '../../src/interactive.js';
+import { createdCount } from '../../src/mark-result.js';
 
 const DEFAULT_INSTRUCTIONS = `
 Tag every obligation, duty, covenant, restriction, or commitment in this document.
@@ -100,7 +101,7 @@ async function main(): Promise<void> {
       entityTypes: [entityType('Obligation')],
       instructions: INSTRUCTIONS,
     });
-    const n = progress.progress?.createdCount ?? 0;
+    const n = createdCount(progress);
     console.log(`  ${rId}: ${n} obligation annotations`);
   }
 
@@ -158,7 +159,7 @@ async function main(): Promise<void> {
       continue;
     }
 
-    const gather = await semiont.gather.annotation(a.annId, a.rId, { contextWindow: 1500 });
+    const gather = await semiont.gather.annotation(a.rId, a.annId, { contextWindow: 1500 });
     const context = gather.response as GatheredContext;
 
     const yieldEvent = await semiont.yield.fromAnnotation(a.rId, a.annId, {

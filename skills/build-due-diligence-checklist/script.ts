@@ -105,7 +105,7 @@ async function main(): Promise<void> {
     console.log('Fetching surrounding-paragraph excerpts via gather.annotation...');
     for (const item of items) {
       try {
-        const gather = await semiont.gather.annotation(item.annId, item.rId, {
+        const gather = await semiont.gather.annotation(item.rId, item.annId, {
           contextWindow: 600,
         });
         const ctx = gather.response as GatheredContext;

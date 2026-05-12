@@ -18,8 +18,7 @@ If you're an AI assistant working in this repo, this file is your orientation. T
 | Skill | What it does | New SDK verbs |
 |---|---|---|
 | [`ingest-corpus`](skills/ingest-corpus/) | Walk the repo, declare the KB's entity-type vocabulary, create one resource per file | `frame.addEntityTypes`, `yield.resource` |
-| [`mark-named-entities`](skills/mark-named-entities/) | Detect Person, Organization, Address, Date, MonetaryValue, LegalSection, LegalDocument, LegalTerm spans | `mark.assist` (linking) |
-| [`mark-descriptive-references`](skills/mark-descriptive-references/) | Detect anaphoric mentions ("the landlord", "the vendor", "the owner of …") | `mark.assist` (linking + descriptive references) |
+| [`mark-named-entities`](skills/mark-named-entities/) | Detect Person, Organization, Address, Date, MonetaryValue, LegalSection, LegalDocument, LegalTerm spans — both formal mentions and descriptive references ("the landlord", "the vendor") | `mark.assist` (linking, optionally with `includeDescriptiveReferences`) |
 | [`assess-contract-risks`](skills/assess-contract-risks/) | Flag risk-prone clauses (asymmetric provisions, vague language, missing definitions) | `mark.assist` (assessing) |
 | [`comment-action-items`](skills/comment-action-items/) | Surface action items, deadlines, required follow-ups | `mark.assist` (commenting) |
 | [`build-party-graph`](skills/build-party-graph/) | Promote Person/Organization mentions to Party resources, encode inter-party relationships | `+ yield.fromAnnotation`, `bind.body`, `match.search` |
@@ -62,10 +61,9 @@ Drop a markdown file into `context/`, `curated/`, or `generated/` and skill 1 in
 The seeded corpus contains a markdown subdirectory whose documents talk about a property whose owner is named in one document but referred to descriptively elsewhere ("the owner of the property", "the landlord"). After running:
 
 1. `ingest-corpus` → resources for each document.
-2. `mark-named-entities` → annotations on the named entities (the formal organization names, the addresses, the dates).
-3. `mark-descriptive-references` → annotations on the descriptive references ("the owner of …").
-4. `build-party-graph` → Party resources for every distinct named entity.
-5. `resolve-descriptive-references` → walks each descriptive-reference annotation, gathers context, matches against Party resources, binds where evidence supports it, and produces an **Investigation resource** narrating the resolution path.
+2. `mark-named-entities` → annotations on every entity mention — the formal organization names AND the descriptive references ("the owner of …", "the landlord") — in one `mark.assist` pass.
+3. `build-party-graph` → Party resources for every distinct named entity.
+4. `resolve-descriptive-references` → walks each descriptive-reference annotation, gathers context, matches against Party resources, binds where evidence supports it, and produces an **Investigation resource** narrating the resolution path.
 
 The Investigation resource is the demonstration — a queryable artifact that shows *how* an unknown counterparty was tracked down, citing the exact source paragraphs. This pattern works on any legal corpus: drop in your own documents, run the skills, get an Investigation that traces however many descriptive references your text contains. Specific names from the seeded corpus appear *only in the Investigation that the run produces*; the skills themselves never hard-code any party, address, exhibit, or matter name.
 

@@ -1,16 +1,21 @@
 /**
- * mark-named-entities — detect formally-named entity spans across the
- * markdown corpus.
+ * mark-named-entities — detect entity spans across the markdown corpus.
  *
- * mark.assist with motivation 'linking', no descriptive-reference detection
- * (skill 3 handles those separately). Targets markdown resources only;
- * PDFs are silently skipped because mark.assist requires text input.
+ * mark.assist with motivation 'linking'. Default behavior surfaces both
+ * formally-named entities (people, organizations, dates, …) AND
+ * descriptive references that point at those entity types ("the Vendor",
+ * "the landlord", "the owner of the property"). Tier-2 skills resolve
+ * them.
+ *
+ * Set INCLUDE_DESCRIPTIVE_REFERENCES=0 to restrict the pass to named
+ * entities only.
  *
  * Usage: tsx skills/mark-named-entities/script.ts [<resourceId>] [--interactive]
  */
 
 import { SemiontClient, entityType, resourceId as ridBrand, type ResourceId } from '@semiont/sdk';
 import { confirm, close as closeInteractive } from '../../src/interactive.js';
+import { createdCount } from '../../src/mark-result.js';
 
 const ENTITY_TYPES = (
   process.env.ENTITY_TYPES ??
@@ -18,6 +23,14 @@ const ENTITY_TYPES = (
 )
   .split(',')
   .map((t) => entityType(t.trim()));
+
+// Default true. The worker prompt under includeDescriptiveReferences:true
+// asks for BOTH direct mentions and anaphora — strict superset of the
+// named-entity-only pass. Off only when callers explicitly want the
+// narrower set (e.g. a downstream skill that needs precise named-entity
+// counts without anaphora noise).
+const INCLUDE_DESCRIPTIVE_REFERENCES =
+  (process.env.INCLUDE_DESCRIPTIVE_REFERENCES ?? '1') !== '0';
 
 function getMediaType(r: any): string | undefined {
   const reps = Array.isArray(r.representations)
@@ -59,7 +72,8 @@ async function main(): Promise<void> {
   }
 
   console.log(
-    `Will run mark.assist (motivation: linking, ${ENTITY_TYPES.length} entity types) ` +
+    `Will run mark.assist (motivation: linking, ${ENTITY_TYPES.length} entity types, ` +
+      `descriptive references ${INCLUDE_DESCRIPTIVE_REFERENCES ? 'on' : 'off'}) ` +
       `against ${targets.length} markdown resource(s).`,
   );
 
@@ -75,13 +89,14 @@ async function main(): Promise<void> {
   for (const rId of targets) {
     const progress = await semiont.mark.assist(rId, 'linking', {
       entityTypes: ENTITY_TYPES,
+      includeDescriptiveReferences: INCLUDE_DESCRIPTIVE_REFERENCES,
     });
-    const n = progress.progress?.createdCount ?? 0;
+    const n = createdCount(progress);
     totalCreated += n;
     console.log(`  ${rId}: ${n} new annotations`);
   }
 
-  console.log(`\nDone. Created ${totalCreated} named-entity annotations.`);
+  console.log(`\nDone. Created ${totalCreated} entity annotations.`);
   semiont.dispose();
   closeInteractive();
 }
