@@ -65,10 +65,11 @@ export async function pick<T>(
   options: T[],
   render: (t: T) => string,
 ): Promise<T | null> {
-  if (options.length === 0) return null;
+  const first = options[0];
+  if (first === undefined) return null;
   if (!INTERACTIVE) {
-    console.log(`${prompt} [auto-pick: ${render(options[0])}]`);
-    return options[0];
+    console.log(`${prompt} [auto-pick: ${render(first)}]`);
+    return first;
   }
   console.log(prompt);
   options.forEach((opt, i) => {
@@ -79,7 +80,8 @@ export async function pick<T>(
   if (!answer) return null;
   const idx = Number(answer) - 1;
   if (Number.isFinite(idx) && idx >= 0 && idx < options.length) {
-    return options[idx];
+    const chosen = options[idx];
+    if (chosen !== undefined) return chosen;
   }
   console.log('Skipping.');
   return null;
@@ -113,5 +115,10 @@ export async function preview<T>(
     .split(',')
     .map((s) => Number(s.trim()) - 1)
     .filter((i) => Number.isFinite(i) && i >= 0 && i < items.length);
-  return indices.map((i) => items[i]);
+  const selected: T[] = [];
+  for (const i of indices) {
+    const item = items[i];
+    if (item !== undefined) selected.push(item);
+  }
+  return selected;
 }

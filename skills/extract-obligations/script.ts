@@ -112,19 +112,31 @@ async function main(): Promise<void> {
     const annotations = await semiont.browse.annotations(rId);
     for (const ann of annotations) {
       if (ann.motivation !== 'linking') continue;
-      const alreadyBound = (ann.body ?? []).some(
+      const bodies = Array.isArray(ann.body) ? ann.body : ann.body ? [ann.body] : [];
+      const alreadyBound = bodies.some(
         (b: any) =>
           b.type === 'SpecificResource' && b.purpose === 'linking',
       );
       if (alreadyBound) continue;
-      const tags = (ann.body ?? [])
+      const tags = bodies
         .filter((b: any) => b.type === 'TextualBody' && b.purpose === 'tagging')
         .flatMap((b: any) => (Array.isArray(b.value) ? b.value : [b.value]));
       if (!tags.includes('Obligation')) continue;
+      const target = ann.target;
+      const selectors =
+        typeof target === 'string' || !target.selector
+          ? []
+          : Array.isArray(target.selector)
+            ? target.selector
+            : [target.selector];
+      let quote = '';
+      for (const s of selectors) {
+        if (s.type === 'TextQuoteSelector') { quote = s.exact; break; }
+      }
       obligationAnnotations.push({
         rId,
         annId: ann.id,
-        text: ann.target?.selector?.exact ?? '',
+        text: quote,
       });
     }
   }
@@ -160,6 +172,7 @@ async function main(): Promise<void> {
     }
 
     const gather = await semiont.gather.annotation(a.rId, a.annId, { contextWindow: 1500 });
+    if (!('response' in gather)) continue;
     const context = gather.response as GatheredContext;
 
     const yieldEvent = await semiont.yield.fromAnnotation(a.rId, a.annId, {

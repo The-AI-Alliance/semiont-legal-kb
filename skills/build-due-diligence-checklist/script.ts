@@ -68,16 +68,28 @@ async function main(): Promise<void> {
     const annotations = await semiont.browse.annotations(rId);
     for (const ann of annotations) {
       if (ann.motivation !== 'commenting') continue;
-      const commentText = (ann.body ?? [])
+      const bodies = Array.isArray(ann.body) ? ann.body : ann.body ? [ann.body] : [];
+      const commentText = bodies
         .filter((b: any) => b.type === 'TextualBody' && b.purpose === 'commenting')
         .map((b: any) => (Array.isArray(b.value) ? b.value.join(' ') : b.value))
         .join(' ');
       if (!commentText.trim()) continue;
+      const target = ann.target;
+      const selectors =
+        typeof target === 'string' || !target.selector
+          ? []
+          : Array.isArray(target.selector)
+            ? target.selector
+            : [target.selector];
+      let quote = '';
+      for (const s of selectors) {
+        if (s.type === 'TextQuoteSelector') { quote = s.exact; break; }
+      }
       items.push({
         rId,
         rName: r.name ?? r['@id'],
         annId: ann.id,
-        sourceQuote: ann.target?.selector?.exact ?? '',
+        sourceQuote: quote,
         comment: commentText.trim(),
       });
     }
@@ -108,6 +120,7 @@ async function main(): Promise<void> {
         const gather = await semiont.gather.annotation(item.rId, item.annId, {
           contextWindow: 600,
         });
+        if (!('response' in gather)) continue;
         const ctx = gather.response as GatheredContext;
         const ctxText = (ctx as any).contextText ?? (ctx as any).text ?? '';
         if (typeof ctxText === 'string' && ctxText) {

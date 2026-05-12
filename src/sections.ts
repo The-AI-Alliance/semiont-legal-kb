@@ -54,7 +54,7 @@ export function splitMarkdownSections(markdown: string): Section[] {
       const m = line.match(HEADING_RE);
       flush();
       buffer = [];
-      if (m && m.groups) {
+      if (m && m.groups && m.groups.anchor && m.groups.full) {
         current = {
           anchor: m.groups.anchor.trim(),
           heading: m.groups.full.trim(),
