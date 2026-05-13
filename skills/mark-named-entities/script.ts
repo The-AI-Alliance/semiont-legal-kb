@@ -10,6 +10,17 @@
  * Set INCLUDE_DESCRIPTIVE_REFERENCES=0 to restrict the pass to named
  * entities only.
  *
+ * **PDF caveat.** `mark.assist` does not extract text from binary
+ * resources. If invoked against a PDF (or any non-text resource), the
+ * worker feeds the raw bytes to the LLM, which then "finds" entities in
+ * PDF syntax tokens (e.g. tagging the `/Producer` field "ReportLab" as
+ * an Organization). The annotations have bogus position selectors and
+ * the entities are meaningless. This script therefore filters to
+ * `text/markdown` and `text/plain` resources only — including when an
+ * explicit resourceId is passed. PDFs are skipped with a warning.
+ * (See the Semiont-side note: `mark.assist` should reject non-text
+ * resources or run them through the smelter first.)
+ *
  * Usage: tsx skills/mark-named-entities/script.ts [<resourceId>] [--interactive]
  */
 
@@ -51,21 +62,41 @@ async function main(): Promise<void> {
     password: process.env.SEMIONT_USER_PASSWORD!,
   });
 
+  // Always fetch the resource list to enforce the text-only mediaType
+  // filter — even when an explicit resourceId is passed. mark.assist on
+  // a binary PDF produces garbage entity annotations on PDF syntax tokens
+  // (see PDF caveat in the docstring).
+  const all = await semiont.browse.resources({ limit: 1000 });
+  const isText = (r: any) => {
+    const mt = getMediaType(r);
+    return mt === 'text/markdown' || mt === 'text/plain';
+  };
+
   let targets: ResourceId[];
   if (explicitResourceId) {
-    targets = [ridBrand(explicitResourceId)];
+    const r = all.find((x) => x['@id'] === explicitResourceId);
+    if (!r) {
+      console.log(`Resource ${explicitResourceId} not found.`);
+      semiont.dispose();
+      closeInteractive();
+      return;
+    }
+    if (!isText(r)) {
+      console.log(
+        `⚠ Skipping ${explicitResourceId}: mediaType '${getMediaType(r)}' is not text. ` +
+          `mark.assist cannot extract entities from binary content (would tag PDF syntax tokens).`,
+      );
+      semiont.dispose();
+      closeInteractive();
+      return;
+    }
+    targets = [ridBrand(r['@id'])];
   } else {
-    const all = await semiont.browse.resources({ limit: 1000 });
-    targets = all
-      .filter((r) => {
-        const mt = getMediaType(r);
-        return mt === 'text/markdown' || mt === 'text/plain';
-      })
-      .map((r) => ridBrand(r['@id']));
+    targets = all.filter(isText).map((r) => ridBrand(r['@id']));
   }
 
   if (targets.length === 0) {
-    console.log('No markdown corpus resources found. Run skills/ingest-corpus/script.ts first.');
+    console.log('No text resources found. Run skills/ingest-corpus/script.ts first.');
     semiont.dispose();
     closeInteractive();
     return;
