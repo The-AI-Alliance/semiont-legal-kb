@@ -1,4 +1,4 @@
-FROM node:22-alpine
+FROM node:26-alpine
 
 # /kb is bind-mounted from the host. When the host UID doesn't match the
 # in-container semiont user (UID 1001), git's CVE-2022-24765 dubious-ownership
