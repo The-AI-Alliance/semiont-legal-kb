@@ -6,7 +6,8 @@
 #   export SEMIONT_WORKER_SECRET=$(openssl rand -hex 32)
 #   docker compose -f .semiont/compose/backend.yml up
 #   docker compose -f .semiont/compose/backend.yml exec ollama ollama pull nomic-embed-text
-#   docker compose -f .semiont/compose/backend.yml exec ollama ollama pull gemma3:4b
+#   docker compose -f .semiont/compose/backend.yml exec ollama ollama pull gemma4:26b
+#   docker compose -f .semiont/compose/backend.yml exec ollama ollama pull gemma4:e2b
 #
 # Anthropic config (faster, cloud inference):
 #

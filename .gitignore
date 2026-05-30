@@ -1,4 +1,5 @@
 .plans
 .devcontainer/.env
 .devcontainer/admin.json
+.cache/
 
