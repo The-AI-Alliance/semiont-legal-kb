@@ -12,7 +12,9 @@
  */
 
 import {
-  SemiontClient,
+  SemiontSession,
+  InMemorySessionStorage,
+  type KnowledgeBase,
   resourceId as ridBrand,
   type AnnotationId,
   type GatheredContext,
@@ -59,11 +61,18 @@ function getMediaType(r: any): string | undefined {
 }
 
 async function main(): Promise<void> {
-  const semiont = await SemiontClient.signInHttp({
-    baseUrl: process.env.SEMIONT_API_URL ?? 'http://localhost:4000',
-    email: process.env.SEMIONT_USER_EMAIL!,
-    password: process.env.SEMIONT_USER_PASSWORD!,
-  });
+  const baseUrl = process.env.SEMIONT_API_URL ?? 'http://localhost:4000';
+  const email = process.env.SEMIONT_USER_EMAIL!;
+  const password = process.env.SEMIONT_USER_PASSWORD!;
+  const u = new URL(baseUrl);
+  const kb: KnowledgeBase = {
+    id: 'legal-resolve-descriptive-references',
+    label: 'legal resolve-descriptive-references',
+    email,
+    endpoint: { kind: 'http', host: u.hostname, port: Number(u.port) || 4000, protocol: u.protocol.replace(':', '') as 'http' | 'https' },
+  };
+  const session = await SemiontSession.signInHttp({ kb, storage: new InMemorySessionStorage(), baseUrl, email, password });
+  const semiont = session.client;
 
   const all = await semiont.browse.resources({ limit: 1000 });
   const markdownResources = all.filter((r) => {
@@ -73,7 +82,7 @@ async function main(): Promise<void> {
 
   if (markdownResources.length === 0) {
     console.log('No markdown corpus resources found.');
-    semiont.dispose();
+    await session.dispose();
     closeInteractive();
     return;
   }
@@ -122,7 +131,7 @@ async function main(): Promise<void> {
     console.log(
       'No descriptive-reference annotations found. Run skills/mark-named-entities/script.ts first (with the default INCLUDE_DESCRIPTIVE_REFERENCES=1).',
     );
-    semiont.dispose();
+    await session.dispose();
     closeInteractive();
     return;
   }
@@ -134,7 +143,7 @@ async function main(): Promise<void> {
   const proceed = await confirm('Proceed?', true);
   if (!proceed) {
     console.log('Aborted.');
-    semiont.dispose();
+    await session.dispose();
     closeInteractive();
     return;
   }
@@ -288,7 +297,7 @@ async function main(): Promise<void> {
     `\nDone. Bound ${bound}, unresolved ${unresolved}, skipped ${skipped}. ` +
       `Investigation resource: ${investigationId} (${body.length} bytes).`,
   );
-  semiont.dispose();
+  await session.dispose();
   closeInteractive();
 }
 

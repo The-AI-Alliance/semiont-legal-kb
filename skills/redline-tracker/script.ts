@@ -9,7 +9,7 @@
 import { readFileSync, statSync } from 'node:fs';
 import { basename, extname, join } from 'node:path';
 
-import { SemiontClient, resourceId as ridBrand } from '@semiont/sdk';
+import { SemiontSession, InMemorySessionStorage, type KnowledgeBase, resourceId as ridBrand } from '@semiont/sdk';
 import { diffContracts } from '../../src/diff.js';
 import { confirm, close as closeInteractive } from '../../src/interactive.js';
 
@@ -50,11 +50,18 @@ async function main(): Promise<void> {
   const filename = basename(absPath);
   const newVersionName = process.env.NEW_VERSION_NAME ?? nameFromFilename(filename);
 
-  const semiont = await SemiontClient.signInHttp({
-    baseUrl: process.env.SEMIONT_API_URL ?? 'http://localhost:4000',
-    email: process.env.SEMIONT_USER_EMAIL!,
-    password: process.env.SEMIONT_USER_PASSWORD!,
-  });
+  const baseUrl = process.env.SEMIONT_API_URL ?? 'http://localhost:4000';
+  const email = process.env.SEMIONT_USER_EMAIL!;
+  const password = process.env.SEMIONT_USER_PASSWORD!;
+  const u = new URL(baseUrl);
+  const kb: KnowledgeBase = {
+    id: 'legal-redline-tracker',
+    label: 'legal redline-tracker',
+    email,
+    endpoint: { kind: 'http', host: u.hostname, port: Number(u.port) || 4000, protocol: u.protocol.replace(':', '') as 'http' | 'https' },
+  };
+  const session = await SemiontSession.signInHttp({ kb, storage: new InMemorySessionStorage(), baseUrl, email, password });
+  const semiont = session.client;
 
   // Step 1: fetch prior body, read new body.
   console.log(`Fetching prior version ${priorId}...`);
@@ -97,7 +104,7 @@ async function main(): Promise<void> {
 
   if (changes.length === 0) {
     console.log('No section-level changes detected. Done.');
-    semiont.dispose();
+    await session.dispose();
     closeInteractive();
     return;
   }
@@ -111,7 +118,7 @@ async function main(): Promise<void> {
   const proceed = await confirm(`Synthesize ${changes.length} VersionDelta resource(s)?`, true);
   if (!proceed) {
     console.log('Aborted (prior + new versions and supersedes link are still recorded).');
-    semiont.dispose();
+    await session.dispose();
     closeInteractive();
     return;
   }
@@ -157,7 +164,7 @@ async function main(): Promise<void> {
   console.log(
     `\nDone. New version: ${newId}; ${synthesized} VersionDelta resource(s) synthesized.`,
   );
-  semiont.dispose();
+  await session.dispose();
   closeInteractive();
 }
 

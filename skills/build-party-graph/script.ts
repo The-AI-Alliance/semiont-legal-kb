@@ -13,7 +13,9 @@
  */
 
 import {
-  SemiontClient,
+  SemiontSession,
+  InMemorySessionStorage,
+  type KnowledgeBase,
   entityType,
   resourceId as ridBrand,
   type AnnotationId,
@@ -80,11 +82,18 @@ interface PartyAnno {
 }
 
 async function main(): Promise<void> {
-  const semiont = await SemiontClient.signInHttp({
-    baseUrl: process.env.SEMIONT_API_URL ?? 'http://localhost:4000',
-    email: process.env.SEMIONT_USER_EMAIL!,
-    password: process.env.SEMIONT_USER_PASSWORD!,
-  });
+  const baseUrl = process.env.SEMIONT_API_URL ?? 'http://localhost:4000';
+  const email = process.env.SEMIONT_USER_EMAIL!;
+  const password = process.env.SEMIONT_USER_PASSWORD!;
+  const u = new URL(baseUrl);
+  const kb: KnowledgeBase = {
+    id: 'legal-build-party-graph',
+    label: 'legal build-party-graph',
+    email,
+    endpoint: { kind: 'http', host: u.hostname, port: Number(u.port) || 4000, protocol: u.protocol.replace(':', '') as 'http' | 'https' },
+  };
+  const session = await SemiontSession.signInHttp({ kb, storage: new InMemorySessionStorage(), baseUrl, email, password });
+  const semiont = session.client;
 
   const all = await semiont.browse.resources({ limit: 1000 });
   const markdownResources = all.filter((r) => {
@@ -94,7 +103,7 @@ async function main(): Promise<void> {
 
   if (markdownResources.length === 0) {
     console.log('No markdown corpus resources found. Run skills/ingest-corpus/script.ts first.');
-    semiont.dispose();
+    await session.dispose();
     closeInteractive();
     return;
   }
@@ -140,7 +149,7 @@ async function main(): Promise<void> {
     console.log(
       'No Person/Organization annotations found. Run skills/mark-named-entities/script.ts first.',
     );
-    semiont.dispose();
+    await session.dispose();
     closeInteractive();
     return;
   }
@@ -179,7 +188,7 @@ async function main(): Promise<void> {
     );
     if (!proceed) {
       console.log('Aborted before pass 1.');
-      semiont.dispose();
+      await session.dispose();
       closeInteractive();
       return;
     }
@@ -266,7 +275,7 @@ async function main(): Promise<void> {
   // ---------- Pass 2: relationship extraction ----------
   if (SKIP_RELATIONSHIP_PASS) {
     console.log('Skipping pass 2 (relationship extraction) — SKIP_RELATIONSHIP_PASS=1.');
-    semiont.dispose();
+    await session.dispose();
     closeInteractive();
     return;
   }
@@ -277,7 +286,7 @@ async function main(): Promise<void> {
   const proceedRel = await confirm('Proceed?', true);
   if (!proceedRel) {
     console.log('Aborted before pass 2.');
-    semiont.dispose();
+    await session.dispose();
     closeInteractive();
     return;
   }
@@ -295,7 +304,7 @@ async function main(): Promise<void> {
   }
 
   console.log(`\nPass 2 done. Created ${totalRel} relationship annotations across the corpus.`);
-  semiont.dispose();
+  await session.dispose();
   closeInteractive();
 }
 

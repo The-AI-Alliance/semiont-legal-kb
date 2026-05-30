@@ -10,7 +10,9 @@
  */
 
 import {
-  SemiontClient,
+  SemiontSession,
+  InMemorySessionStorage,
+  type KnowledgeBase,
   resourceId as ridBrand,
   type AnnotationId,
   type GatheredContext,
@@ -43,11 +45,18 @@ function getMediaType(r: any): string | undefined {
 }
 
 async function main(): Promise<void> {
-  const semiont = await SemiontClient.signInHttp({
-    baseUrl: process.env.SEMIONT_API_URL ?? 'http://localhost:4000',
-    email: process.env.SEMIONT_USER_EMAIL!,
-    password: process.env.SEMIONT_USER_PASSWORD!,
-  });
+  const baseUrl = process.env.SEMIONT_API_URL ?? 'http://localhost:4000';
+  const email = process.env.SEMIONT_USER_EMAIL!;
+  const password = process.env.SEMIONT_USER_PASSWORD!;
+  const u = new URL(baseUrl);
+  const kb: KnowledgeBase = {
+    id: 'legal-build-due-diligence-checklist',
+    label: 'legal build-due-diligence-checklist',
+    email,
+    endpoint: { kind: 'http', host: u.hostname, port: Number(u.port) || 4000, protocol: u.protocol.replace(':', '') as 'http' | 'https' },
+  };
+  const session = await SemiontSession.signInHttp({ kb, storage: new InMemorySessionStorage(), baseUrl, email, password });
+  const semiont = session.client;
 
   const all = await semiont.browse.resources({ limit: 1000 });
   const markdownResources = all.filter((r) => {
@@ -57,7 +66,7 @@ async function main(): Promise<void> {
 
   if (markdownResources.length === 0) {
     console.log('No markdown corpus resources found.');
-    semiont.dispose();
+    await session.dispose();
     closeInteractive();
     return;
   }
@@ -99,7 +108,7 @@ async function main(): Promise<void> {
     console.log(
       'No commenting annotations found. Run skills/comment-action-items/script.ts first.',
     );
-    semiont.dispose();
+    await session.dispose();
     closeInteractive();
     return;
   }
@@ -108,7 +117,7 @@ async function main(): Promise<void> {
   const proceed = await confirm(`Synthesize a Checklist resource named "${CHECKLIST_NAME}"?`, true);
   if (!proceed) {
     console.log('Aborted.');
-    semiont.dispose();
+    await session.dispose();
     closeInteractive();
     return;
   }
@@ -183,7 +192,7 @@ async function main(): Promise<void> {
   });
 
   console.log(`\nDone. Checklist resource: ${checklistId} (${items.length} items, ${body.length} bytes).`);
-  semiont.dispose();
+  await session.dispose();
   closeInteractive();
 }
 

@@ -16,15 +16,22 @@
  * Usage: tsx skills/register-tag-schemas/script.ts
  */
 
-import { SemiontClient } from '@semiont/sdk';
+import { SemiontSession, InMemorySessionStorage, type KnowledgeBase } from '@semiont/sdk';
 import { ALL_SCHEMAS } from '../../src/tag-schemas.js';
 
 async function main(): Promise<void> {
-  const semiont = await SemiontClient.signInHttp({
-    baseUrl: process.env.SEMIONT_API_URL ?? 'http://localhost:4000',
-    email: process.env.SEMIONT_USER_EMAIL!,
-    password: process.env.SEMIONT_USER_PASSWORD!,
-  });
+  const baseUrl = process.env.SEMIONT_API_URL ?? 'http://localhost:4000';
+  const email = process.env.SEMIONT_USER_EMAIL!;
+  const password = process.env.SEMIONT_USER_PASSWORD!;
+  const u = new URL(baseUrl);
+  const kb: KnowledgeBase = {
+    id: 'legal-register-tag-schemas',
+    label: 'legal register-tag-schemas',
+    email,
+    endpoint: { kind: 'http', host: u.hostname, port: Number(u.port) || 4000, protocol: u.protocol.replace(':', '') as 'http' | 'https' },
+  };
+  const session = await SemiontSession.signInHttp({ kb, storage: new InMemorySessionStorage(), baseUrl, email, password });
+  const semiont = session.client;
 
   for (const schema of ALL_SCHEMAS) {
     await semiont.frame.addTagSchema(schema);
@@ -32,7 +39,7 @@ async function main(): Promise<void> {
   }
 
   console.log(`\nDone. ${ALL_SCHEMAS.length} schema(s) registered.`);
-  semiont.dispose();
+  await session.dispose();
 }
 
 main().catch((e) => {

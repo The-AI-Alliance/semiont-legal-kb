@@ -7,7 +7,9 @@
  */
 
 import {
-  SemiontClient,
+  SemiontSession,
+  InMemorySessionStorage,
+  type KnowledgeBase,
   resourceId as ridBrand,
   type AnnotationId,
   type GatheredContext,
@@ -47,11 +49,18 @@ async function main(): Promise<void> {
   }
   const contractId = ridBrand(contractIdArg);
 
-  const semiont = await SemiontClient.signInHttp({
-    baseUrl: process.env.SEMIONT_API_URL ?? 'http://localhost:4000',
-    email: process.env.SEMIONT_USER_EMAIL!,
-    password: process.env.SEMIONT_USER_PASSWORD!,
-  });
+  const baseUrl = process.env.SEMIONT_API_URL ?? 'http://localhost:4000';
+  const email = process.env.SEMIONT_USER_EMAIL!;
+  const password = process.env.SEMIONT_USER_PASSWORD!;
+  const u = new URL(baseUrl);
+  const kb: KnowledgeBase = {
+    id: 'legal-build-section-graph',
+    label: 'legal build-section-graph',
+    email,
+    endpoint: { kind: 'http', host: u.hostname, port: Number(u.port) || 4000, protocol: u.protocol.replace(':', '') as 'http' | 'https' },
+  };
+  const session = await SemiontSession.signInHttp({ kb, storage: new InMemorySessionStorage(), baseUrl, email, password });
+  const semiont = session.client;
 
   // Fetch the contract body and split into sections.
   const body = await semiont.browse.resourceContent(contractId);
@@ -62,7 +71,7 @@ async function main(): Promise<void> {
       'No markdown headings detected in this document. Nothing to decompose. ' +
         'Existing LegalSection annotations remain queryable as plain text references.',
     );
-    semiont.dispose();
+    await session.dispose();
     closeInteractive();
     return;
   }
@@ -77,7 +86,7 @@ async function main(): Promise<void> {
   const proceed = await confirm(`Synthesize ${sections.length} LegalSection resource(s)?`, true);
   if (!proceed) {
     console.log('Aborted.');
-    semiont.dispose();
+    await session.dispose();
     closeInteractive();
     return;
   }
@@ -142,7 +151,7 @@ async function main(): Promise<void> {
 
   if (sectionAnnotations.length === 0) {
     console.log('No unbound LegalSection annotations found across the corpus.');
-    semiont.dispose();
+    await session.dispose();
     closeInteractive();
     return;
   }
@@ -182,7 +191,7 @@ async function main(): Promise<void> {
     `\nDone. Decomposed into ${sectionResources.length} LegalSection resource(s); ` +
       `bound ${bound} cross-document references; ${unmatched} unmatched.`,
   );
-  semiont.dispose();
+  await session.dispose();
   closeInteractive();
 }
 
