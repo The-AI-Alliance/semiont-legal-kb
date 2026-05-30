@@ -2,4 +2,5 @@
 .devcontainer/.env
 .devcontainer/admin.json
 .cache/
+node_modules
 
