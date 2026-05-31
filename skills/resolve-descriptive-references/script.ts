@@ -36,6 +36,32 @@ const NAMED_ENTITY_TAGS = new Set([
   'LegalTerm',
 ]);
 
+// Scope to legal-kb resources only. Without this, the script also walks
+// caselaw resources sharing the same backend and treats their unbound
+// `Citation`-tagged annotations as descriptive references — wasted LLM
+// compute and pollutes the resulting Investigation resource.
+const LEGAL_RESOURCE_ENTITY_TYPES = new Set([
+  'Contract',
+  'Amendment',
+  'Exhibit',
+  'Letter',
+  'SideLetter',
+  'Email',
+  'Memo',
+  'Policy',
+  'CorporateRecord',
+  'LegalOpinion',
+]);
+
+// Defensive: annotations carrying any of these tags are never descriptive
+// references — they're caselaw citation annotations even if the resource
+// filter somehow lets them through.
+const NON_DESCRIPTIVE_TAGS = new Set([
+  'Citation',
+  'StatutoryCitation',
+  'JournalCitation',
+]);
+
 interface DescriptiveAnno {
   rId: ResourceId;
   rName: string;
@@ -78,14 +104,22 @@ async function main(): Promise<void> {
     const all = await semiont.browse.resources({ limit: 1000 });
     const markdownResources = all.filter((r) => {
       const mt = getMediaType(r);
-      return mt === 'text/markdown' || mt === 'text/plain';
+      const isText = mt === 'text/markdown' || mt === 'text/plain';
+      if (!isText) return false;
+      const ets = r.entityTypes ?? [];
+      return ets.some((t: string) => LEGAL_RESOURCE_ENTITY_TYPES.has(t));
     });
 
     if (markdownResources.length === 0) {
-      console.log('No markdown corpus resources found.');
+      console.log(
+        'No legal-kb text resources found (filtered by entityType: ' +
+          [...LEGAL_RESOURCE_ENTITY_TYPES].join(', ') +
+          ').',
+      );
       closeInteractive();
       return;
     }
+    console.log(`Scoping to ${markdownResources.length} legal-kb text resource(s).`);
 
     // Collect descriptive-reference annotations: linking-motivation annotations
     // whose tags don't include any named-entity type (skill 2's output is
@@ -107,6 +141,8 @@ async function main(): Promise<void> {
           .flatMap((b: any) => (Array.isArray(b.value) ? b.value : [b.value]));
         const isNamedEntity = tags.some((t: string) => NAMED_ENTITY_TAGS.has(t));
         if (isNamedEntity) continue;
+        // Defensive: never treat citation-tagged annotations as descriptive refs.
+        if (tags.some((t: string) => NON_DESCRIPTIVE_TAGS.has(t))) continue;
         const target = ann.target;
         const selectors =
           typeof target === 'string' || !target.selector
