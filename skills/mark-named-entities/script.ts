@@ -69,74 +69,73 @@ async function main(): Promise<void> {
   const session = await SemiontSession.signInHttp({ kb, storage: new InMemorySessionStorage(), baseUrl, email, password });
   const semiont = session.client;
 
-  // Always fetch the resource list to enforce the text-only mediaType
-  // filter — even when an explicit resourceId is passed. mark.assist on
-  // a binary PDF produces garbage entity annotations on PDF syntax tokens
-  // (see PDF caveat in the docstring).
-  const all = await semiont.browse.resources({ limit: 1000 });
-  const isText = (r: any) => {
-    const mt = getMediaType(r);
-    return mt === 'text/markdown' || mt === 'text/plain';
-  };
+  try {
+    // Always fetch the resource list to enforce the text-only mediaType
+    // filter — even when an explicit resourceId is passed. mark.assist on
+    // a binary PDF produces garbage entity annotations on PDF syntax tokens
+    // (see PDF caveat in the docstring).
+    const all = await semiont.browse.resources({ limit: 1000 });
+    const isText = (r: any) => {
+      const mt = getMediaType(r);
+      return mt === 'text/markdown' || mt === 'text/plain';
+    };
 
-  let targets: ResourceId[];
-  if (explicitResourceId) {
-    const r = all.find((x) => x['@id'] === explicitResourceId);
-    if (!r) {
-      console.log(`Resource ${explicitResourceId} not found.`);
-      await session.dispose();
+    let targets: ResourceId[];
+    if (explicitResourceId) {
+      const r = all.find((x) => x['@id'] === explicitResourceId);
+      if (!r) {
+        console.log(`Resource ${explicitResourceId} not found.`);
+        closeInteractive();
+        return;
+      }
+      if (!isText(r)) {
+        console.log(
+          `⚠ Skipping ${explicitResourceId}: mediaType '${getMediaType(r)}' is not text. ` +
+            `mark.assist cannot extract entities from binary content (would tag PDF syntax tokens).`,
+        );
+        closeInteractive();
+        return;
+      }
+      targets = [ridBrand(r['@id'])];
+    } else {
+      targets = all.filter(isText).map((r) => ridBrand(r['@id']));
+    }
+
+    if (targets.length === 0) {
+      console.log('No text resources found. Run skills/ingest-corpus/script.ts first.');
       closeInteractive();
       return;
     }
-    if (!isText(r)) {
-      console.log(
-        `⚠ Skipping ${explicitResourceId}: mediaType '${getMediaType(r)}' is not text. ` +
-          `mark.assist cannot extract entities from binary content (would tag PDF syntax tokens).`,
-      );
-      await session.dispose();
+
+    console.log(
+      `Will run mark.assist (motivation: linking, ${ENTITY_TYPES.length} entity types, ` +
+        `descriptive references ${INCLUDE_DESCRIPTIVE_REFERENCES ? 'on' : 'off'}) ` +
+        `against ${targets.length} markdown resource(s).`,
+    );
+
+    const proceed = await confirm('Proceed?', true);
+    if (!proceed) {
+      console.log('Aborted.');
       closeInteractive();
       return;
     }
-    targets = [ridBrand(r['@id'])];
-  } else {
-    targets = all.filter(isText).map((r) => ridBrand(r['@id']));
-  }
 
-  if (targets.length === 0) {
-    console.log('No text resources found. Run skills/ingest-corpus/script.ts first.');
-    await session.dispose();
+    let totalCreated = 0;
+    for (const rId of targets) {
+      const progress = await semiont.mark.assist(rId, 'linking', {
+        entityTypes: ENTITY_TYPES,
+        includeDescriptiveReferences: INCLUDE_DESCRIPTIVE_REFERENCES,
+      });
+      const n = createdCount(progress);
+      totalCreated += n;
+      console.log(`  ${rId}: ${n} new annotations`);
+    }
+
+    console.log(`\nDone. Created ${totalCreated} entity annotations.`);
     closeInteractive();
-    return;
-  }
-
-  console.log(
-    `Will run mark.assist (motivation: linking, ${ENTITY_TYPES.length} entity types, ` +
-      `descriptive references ${INCLUDE_DESCRIPTIVE_REFERENCES ? 'on' : 'off'}) ` +
-      `against ${targets.length} markdown resource(s).`,
-  );
-
-  const proceed = await confirm('Proceed?', true);
-  if (!proceed) {
-    console.log('Aborted.');
+  } finally {
     await session.dispose();
-    closeInteractive();
-    return;
   }
-
-  let totalCreated = 0;
-  for (const rId of targets) {
-    const progress = await semiont.mark.assist(rId, 'linking', {
-      entityTypes: ENTITY_TYPES,
-      includeDescriptiveReferences: INCLUDE_DESCRIPTIVE_REFERENCES,
-    });
-    const n = createdCount(progress);
-    totalCreated += n;
-    console.log(`  ${rId}: ${n} new annotations`);
-  }
-
-  console.log(`\nDone. Created ${totalCreated} entity annotations.`);
-  await session.dispose();
-  closeInteractive();
 }
 
 main().catch((e) => {

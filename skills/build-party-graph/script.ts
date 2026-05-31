@@ -95,217 +95,215 @@ async function main(): Promise<void> {
   const session = await SemiontSession.signInHttp({ kb, storage: new InMemorySessionStorage(), baseUrl, email, password });
   const semiont = session.client;
 
-  const all = await semiont.browse.resources({ limit: 1000 });
-  const markdownResources = all.filter((r) => {
-    const mt = getMediaType(r);
-    return mt === 'text/markdown' || mt === 'text/plain';
-  });
+  try {
+    const all = await semiont.browse.resources({ limit: 1000 });
+    const markdownResources = all.filter((r) => {
+      const mt = getMediaType(r);
+      return mt === 'text/markdown' || mt === 'text/plain';
+    });
 
-  if (markdownResources.length === 0) {
-    console.log('No markdown corpus resources found. Run skills/ingest-corpus/script.ts first.');
-    await session.dispose();
-    closeInteractive();
-    return;
-  }
-
-  // ---------- Pass 1: collect Person/Organization annotations ----------
-  const partyAnnotations: PartyAnno[] = [];
-  for (const r of markdownResources) {
-    const rId = ridBrand(r['@id']);
-    const annotations = await semiont.browse.annotations(rId);
-    for (const ann of annotations) {
-      if (ann.motivation !== 'linking') continue;
-      const bodies = Array.isArray(ann.body) ? ann.body : ann.body ? [ann.body] : [];
-      const tags = bodies
-        .filter((b: any) => b.type === 'TextualBody' && b.purpose === 'tagging')
-        .flatMap((b: any) => (Array.isArray(b.value) ? b.value : [b.value]));
-      const partyTags = tags.filter((t: string) => PARTY_ENTITY_TYPES.has(t));
-      if (partyTags.length === 0) continue;
-      const alreadyBound = bodies.some(
-        (b: any) => b.type === 'SpecificResource' && b.purpose === 'linking',
-      );
-      const target = ann.target;
-      const selectors =
-        typeof target === 'string' || !target.selector
-          ? []
-          : Array.isArray(target.selector)
-            ? target.selector
-            : [target.selector];
-      let quote = '';
-      for (const s of selectors) {
-        if (s.type === 'TextQuoteSelector') { quote = s.exact; break; }
-      }
-      partyAnnotations.push({
-        rId,
-        annId: ann.id,
-        text: quote,
-        tags: partyTags,
-        alreadyBound,
-      });
-    }
-  }
-
-  if (partyAnnotations.length === 0) {
-    console.log(
-      'No Person/Organization annotations found. Run skills/mark-named-entities/script.ts first.',
-    );
-    await session.dispose();
-    closeInteractive();
-    return;
-  }
-
-  // Cluster unbound annotations by canonical text
-  const clusters = new Map<string, PartyAnno[]>();
-  let alreadyBoundCount = 0;
-  for (const a of partyAnnotations) {
-    if (a.alreadyBound) {
-      alreadyBoundCount++;
-      continue;
-    }
-    const key = a.text.toLowerCase().trim();
-    if (!key) {
-      console.warn(
-        `  skipping annotation ${a.annId} on ${a.rId} — no TextQuoteSelector ` +
-          `(tags: ${a.tags.join(', ')}). Cluster key would be empty.`,
-      );
-      continue;
-    }
-    if (!clusters.has(key)) clusters.set(key, []);
-    clusters.get(key)!.push(a);
-  }
-
-  console.log(
-    `Found ${partyAnnotations.length} Person/Organization annotation(s). ` +
-      `${alreadyBoundCount} already bound; ${clusters.size} unbound clusters to process.`,
-  );
-
-  if (clusters.size === 0) {
-    console.log('Nothing to promote. Skipping pass 1.');
-  } else {
-    const proceed = await confirm(
-      'Proceed to match each cluster against existing Party resources, synthesize new ones where needed, and bind annotations?',
-      true,
-    );
-    if (!proceed) {
-      console.log('Aborted before pass 1.');
-      await session.dispose();
+    if (markdownResources.length === 0) {
+      console.log('No markdown corpus resources found. Run skills/ingest-corpus/script.ts first.');
       closeInteractive();
       return;
     }
 
-    let bound = 0;
-    let synthesized = 0;
-    let skipped = 0;
-
-    for (const [_, anns] of clusters) {
-      const sample = anns[0];
-      if (!sample) continue;
-
-      const gather = await semiont.gather.annotation(sample.rId, sample.annId, {
-        contextWindow: 1500,
-      });
-      if (!('response' in gather)) continue;
-      const context = gather.response as GatheredContext;
-
-      const matchResult = await semiont.match.search(sample.rId, sample.annId, context, {
-        limit: 5,
-        useSemanticScoring: true,
-      });
-      const top = matchResult.response[0];
-
-      let targetResourceId: string;
-      if (top && (top.score ?? 0) >= MATCH_THRESHOLD) {
-        targetResourceId = top['@id'];
-        console.log(`  ↪ "${sample.text}" → ${top.name} (existing, score ${top.score})`);
-      } else {
-        const proceedYield = isInteractive()
-          ? await confirm(
-              `No confident match for "${sample.text}". Synthesize a new Party resource?`,
-              true,
-            )
-          : true;
-        if (!proceedYield) {
-          skipped++;
-          console.log(`  skipped     "${sample.text}"`);
-          continue;
+    // ---------- Pass 1: collect Person/Organization annotations ----------
+    const partyAnnotations: PartyAnno[] = [];
+    for (const r of markdownResources) {
+      const rId = ridBrand(r['@id']);
+      const annotations = await semiont.browse.annotations(rId);
+      for (const ann of annotations) {
+        if (ann.motivation !== 'linking') continue;
+        const bodies = Array.isArray(ann.body) ? ann.body : ann.body ? [ann.body] : [];
+        const tags = bodies
+          .filter((b: any) => b.type === 'TextualBody' && b.purpose === 'tagging')
+          .flatMap((b: any) => (Array.isArray(b.value) ? b.value : [b.value]));
+        const partyTags = tags.filter((t: string) => PARTY_ENTITY_TYPES.has(t));
+        if (partyTags.length === 0) continue;
+        const alreadyBound = bodies.some(
+          (b: any) => b.type === 'SpecificResource' && b.purpose === 'linking',
+        );
+        const target = ann.target;
+        const selectors =
+          typeof target === 'string' || !target.selector
+            ? []
+            : Array.isArray(target.selector)
+              ? target.selector
+              : [target.selector];
+        let quote = '';
+        for (const s of selectors) {
+          if (s.type === 'TextQuoteSelector') { quote = s.exact; break; }
         }
-
-        const partyType = sample.tags.includes('Organization') ? 'Organization' : 'Person';
-        const yieldEvent = await semiont.yield.fromAnnotation(sample.rId, sample.annId, {
-          title: sample.text,
-          storageUri: `file://generated/party-${slugify(sample.text)}.md`,
-          context,
-          entityTypes: ['Party', partyType],
+        partyAnnotations.push({
+          rId,
+          annId: ann.id,
+          text: quote,
+          tags: partyTags,
+          alreadyBound,
         });
-
-        if (yieldEvent.kind !== 'complete') {
-          console.warn(`  unexpected yield event kind for "${sample.text}": ${yieldEvent.kind}`);
-          continue;
-        }
-        const newResourceId = (
-          yieldEvent.data.result as { resourceId?: string } | undefined
-        )?.resourceId;
-        if (!newResourceId) {
-          console.warn(`  yield.fromAnnotation gave no resourceId for "${sample.text}"`);
-          continue;
-        }
-
-        targetResourceId = newResourceId;
-        synthesized++;
-        console.log(`  + "${sample.text}" → ${newResourceId} (synthesized as ${partyType})`);
-      }
-
-      for (const a of anns) {
-        await semiont.bind.body(a.rId, a.annId, [
-          {
-            op: 'add',
-            item: { type: 'SpecificResource', source: targetResourceId, purpose: 'linking' },
-          },
-        ]);
-        bound++;
       }
     }
 
+    if (partyAnnotations.length === 0) {
+      console.log(
+        'No Person/Organization annotations found. Run skills/mark-named-entities/script.ts first.',
+      );
+      closeInteractive();
+      return;
+    }
+
+    // Cluster unbound annotations by canonical text
+    const clusters = new Map<string, PartyAnno[]>();
+    let alreadyBoundCount = 0;
+    for (const a of partyAnnotations) {
+      if (a.alreadyBound) {
+        alreadyBoundCount++;
+        continue;
+      }
+      const key = a.text.toLowerCase().trim();
+      if (!key) {
+        console.warn(
+          `  skipping annotation ${a.annId} on ${a.rId} — no TextQuoteSelector ` +
+            `(tags: ${a.tags.join(', ')}). Cluster key would be empty.`,
+        );
+        continue;
+      }
+      if (!clusters.has(key)) clusters.set(key, []);
+      clusters.get(key)!.push(a);
+    }
+
     console.log(
-      `\nPass 1 done. Bound ${bound} annotations across ${clusters.size} party clusters; ` +
-        `${synthesized} new Party resources synthesized; ${skipped} skipped.`,
+      `Found ${partyAnnotations.length} Person/Organization annotation(s). ` +
+        `${alreadyBoundCount} already bound; ${clusters.size} unbound clusters to process.`,
     );
-  }
 
-  // ---------- Pass 2: relationship extraction ----------
-  if (SKIP_RELATIONSHIP_PASS) {
-    console.log('Skipping pass 2 (relationship extraction) — SKIP_RELATIONSHIP_PASS=1.');
-    await session.dispose();
+    if (clusters.size === 0) {
+      console.log('Nothing to promote. Skipping pass 1.');
+    } else {
+      const proceed = await confirm(
+        'Proceed to match each cluster against existing Party resources, synthesize new ones where needed, and bind annotations?',
+        true,
+      );
+      if (!proceed) {
+        console.log('Aborted before pass 1.');
+        closeInteractive();
+        return;
+      }
+
+      let bound = 0;
+      let synthesized = 0;
+      let skipped = 0;
+
+      for (const [_, anns] of clusters) {
+        const sample = anns[0];
+        if (!sample) continue;
+
+        const gather = await semiont.gather.annotation(sample.rId, sample.annId, {
+          contextWindow: 1500,
+        });
+        if (!('response' in gather)) continue;
+        const context = gather.response as GatheredContext;
+
+        const matchResult = await semiont.match.search(sample.rId, sample.annId, context, {
+          limit: 5,
+          useSemanticScoring: true,
+        });
+        const top = matchResult.response[0];
+
+        let targetResourceId: string;
+        if (top && (top.score ?? 0) >= MATCH_THRESHOLD) {
+          targetResourceId = top['@id'];
+          console.log(`  ↪ "${sample.text}" → ${top.name} (existing, score ${top.score})`);
+        } else {
+          const proceedYield = isInteractive()
+            ? await confirm(
+                `No confident match for "${sample.text}". Synthesize a new Party resource?`,
+                true,
+              )
+            : true;
+          if (!proceedYield) {
+            skipped++;
+            console.log(`  skipped     "${sample.text}"`);
+            continue;
+          }
+
+          const partyType = sample.tags.includes('Organization') ? 'Organization' : 'Person';
+          const yieldEvent = await semiont.yield.fromAnnotation(sample.rId, sample.annId, {
+            title: sample.text,
+            storageUri: `file://generated/party-${slugify(sample.text)}.md`,
+            context,
+            entityTypes: ['Party', partyType],
+          });
+
+          if (yieldEvent.kind !== 'complete') {
+            console.warn(`  unexpected yield event kind for "${sample.text}": ${yieldEvent.kind}`);
+            continue;
+          }
+          const newResourceId = (
+            yieldEvent.data.result as { resourceId?: string } | undefined
+          )?.resourceId;
+          if (!newResourceId) {
+            console.warn(`  yield.fromAnnotation gave no resourceId for "${sample.text}"`);
+            continue;
+          }
+
+          targetResourceId = newResourceId;
+          synthesized++;
+          console.log(`  + "${sample.text}" → ${newResourceId} (synthesized as ${partyType})`);
+        }
+
+        for (const a of anns) {
+          await semiont.bind.body(a.rId, a.annId, [
+            {
+              op: 'add',
+              item: { type: 'SpecificResource', source: targetResourceId, purpose: 'linking' },
+            },
+          ]);
+          bound++;
+        }
+      }
+
+      console.log(
+        `\nPass 1 done. Bound ${bound} annotations across ${clusters.size} party clusters; ` +
+          `${synthesized} new Party resources synthesized; ${skipped} skipped.`,
+      );
+    }
+
+    // ---------- Pass 2: relationship extraction ----------
+    if (SKIP_RELATIONSHIP_PASS) {
+      console.log('Skipping pass 2 (relationship extraction) — SKIP_RELATIONSHIP_PASS=1.');
+      closeInteractive();
+      return;
+    }
+
+    console.log(
+      `\nPass 2: relationship extraction across ${markdownResources.length} markdown resource(s).`,
+    );
+    const proceedRel = await confirm('Proceed?', true);
+    if (!proceedRel) {
+      console.log('Aborted before pass 2.');
+      closeInteractive();
+      return;
+    }
+
+    let totalRel = 0;
+    for (const r of markdownResources) {
+      const rId = ridBrand(r['@id']);
+      const progress = await semiont.mark.assist(rId, 'linking', {
+        entityTypes: RELATIONSHIP_ENTITY_TYPES,
+        instructions: RELATIONSHIP_INSTRUCTIONS,
+      });
+      const n = createdCount(progress);
+      totalRel += n;
+      console.log(`  ${rId}: ${n} relationship annotations`);
+    }
+
+    console.log(`\nPass 2 done. Created ${totalRel} relationship annotations across the corpus.`);
     closeInteractive();
-    return;
-  }
-
-  console.log(
-    `\nPass 2: relationship extraction across ${markdownResources.length} markdown resource(s).`,
-  );
-  const proceedRel = await confirm('Proceed?', true);
-  if (!proceedRel) {
-    console.log('Aborted before pass 2.');
+  } finally {
     await session.dispose();
-    closeInteractive();
-    return;
   }
-
-  let totalRel = 0;
-  for (const r of markdownResources) {
-    const rId = ridBrand(r['@id']);
-    const progress = await semiont.mark.assist(rId, 'linking', {
-      entityTypes: RELATIONSHIP_ENTITY_TYPES,
-      instructions: RELATIONSHIP_INSTRUCTIONS,
-    });
-    const n = createdCount(progress);
-    totalRel += n;
-    console.log(`  ${rId}: ${n} relationship annotations`);
-  }
-
-  console.log(`\nPass 2 done. Created ${totalRel} relationship annotations across the corpus.`);
-  await session.dispose();
-  closeInteractive();
 }
 
 main().catch((e) => {

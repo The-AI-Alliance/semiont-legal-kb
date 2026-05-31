@@ -105,32 +105,35 @@ async function main(): Promise<void> {
   const session = await SemiontSession.signInHttp({ kb, storage: new InMemorySessionStorage(), baseUrl, email, password });
   const semiont = session.client;
 
-  // Declare this KB's entity-type vocabulary via frame. Idempotent.
-  console.log(`Declaring ${KB_ENTITY_TYPES.length} entity types via frame...`);
-  await semiont.frame.addEntityTypes(KB_ENTITY_TYPES);
+  try {
+    // Declare this KB's entity-type vocabulary via frame. Idempotent.
+    console.log(`Declaring ${KB_ENTITY_TYPES.length} entity types via frame...`);
+    await semiont.frame.addEntityTypes(KB_ENTITY_TYPES);
 
-  let created = 0;
-  let failed = 0;
-  for (const file of files) {
-    try {
-      const buffer = readForUpload(file, repoRoot);
-      const { resourceId } = await semiont.yield.resource({
-        name: file.name,
-        file: buffer,
-        format: file.format,
-        entityTypes: file.entityTypes,
-        storageUri: file.storageUri,
-      });
-      created++;
-      console.log(`  + ${file.path} → ${resourceId} [${file.entityTypes.join(', ')}]`);
-    } catch (e) {
-      failed++;
-      console.warn(`  ! ${file.path} failed: ${(e as Error).message}`);
+    let created = 0;
+    let failed = 0;
+    for (const file of files) {
+      try {
+        const buffer = readForUpload(file, repoRoot);
+        const { resourceId } = await semiont.yield.resource({
+          name: file.name,
+          file: buffer,
+          format: file.format,
+          entityTypes: file.entityTypes,
+          storageUri: file.storageUri,
+        });
+        created++;
+        console.log(`  + ${file.path} → ${resourceId} [${file.entityTypes.join(', ')}]`);
+      } catch (e) {
+        failed++;
+        console.warn(`  ! ${file.path} failed: ${(e as Error).message}`);
+      }
     }
-  }
 
-  console.log(`\nDone. ${created} resources created, ${failed} failed.`);
-  await session.dispose();
+    console.log(`\nDone. ${created} resources created, ${failed} failed.`);
+  } finally {
+    await session.dispose();
+  }
   closeInteractive();
 }
 

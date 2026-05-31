@@ -33,13 +33,16 @@ async function main(): Promise<void> {
   const session = await SemiontSession.signInHttp({ kb, storage: new InMemorySessionStorage(), baseUrl, email, password });
   const semiont = session.client;
 
-  for (const schema of ALL_SCHEMAS) {
-    await semiont.frame.addTagSchema(schema);
-    console.log(`  registered: ${schema.id} (${schema.tags.length} categories)`);
-  }
+  try {
+    for (const schema of ALL_SCHEMAS) {
+      await semiont.frame.addTagSchema(schema);
+      console.log(`  registered: ${schema.id} (${schema.tags.length} categories)`);
+    }
 
-  console.log(`\nDone. ${ALL_SCHEMAS.length} schema(s) registered.`);
-  await session.dispose();
+    console.log(`\nDone. ${ALL_SCHEMAS.length} schema(s) registered.`);
+  } finally {
+    await session.dispose();
+  }
 }
 
 main().catch((e) => {

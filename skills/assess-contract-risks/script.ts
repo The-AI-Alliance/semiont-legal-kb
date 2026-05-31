@@ -55,48 +55,49 @@ async function main(): Promise<void> {
   const session = await SemiontSession.signInHttp({ kb, storage: new InMemorySessionStorage(), baseUrl, email, password });
   const semiont = session.client;
 
-  let targets: ResourceId[];
-  if (explicitResourceId) {
-    targets = [ridBrand(explicitResourceId)];
-  } else {
-    const all = await semiont.browse.resources({ limit: 1000 });
-    targets = all
-      .filter((r) => {
-        const mt = getMediaType(r);
-        return mt === 'text/markdown' || mt === 'text/plain';
-      })
-      .map((r) => ridBrand(r['@id']));
-  }
+  try {
+    let targets: ResourceId[];
+    if (explicitResourceId) {
+      targets = [ridBrand(explicitResourceId)];
+    } else {
+      const all = await semiont.browse.resources({ limit: 1000 });
+      targets = all
+        .filter((r) => {
+          const mt = getMediaType(r);
+          return mt === 'text/markdown' || mt === 'text/plain';
+        })
+        .map((r) => ridBrand(r['@id']));
+    }
 
-  if (targets.length === 0) {
-    console.log('No markdown corpus resources found.');
-    await session.dispose();
+    if (targets.length === 0) {
+      console.log('No markdown corpus resources found.');
+      closeInteractive();
+      return;
+    }
+
+    const firstLine = INSTRUCTIONS.split('\n').find((l) => l.trim().length > 0) ?? '';
+    console.log(`Will run mark.assist (motivation: assessing) against ${targets.length} resource(s).`);
+    console.log(`  Focus: ${firstLine}`);
+    const proceed = await confirm('Proceed?', true);
+    if (!proceed) {
+      console.log('Aborted.');
+      closeInteractive();
+      return;
+    }
+
+    let totalCreated = 0;
+    for (const rId of targets) {
+      const progress = await semiont.mark.assist(rId, 'assessing', { instructions: INSTRUCTIONS });
+      const n = createdCount(progress);
+      totalCreated += n;
+      console.log(`  ${rId}: ${n} risk flags`);
+    }
+
+    console.log(`\nDone. Flagged ${totalCreated} risk-prone clauses.`);
     closeInteractive();
-    return;
-  }
-
-  const firstLine = INSTRUCTIONS.split('\n').find((l) => l.trim().length > 0) ?? '';
-  console.log(`Will run mark.assist (motivation: assessing) against ${targets.length} resource(s).`);
-  console.log(`  Focus: ${firstLine}`);
-  const proceed = await confirm('Proceed?', true);
-  if (!proceed) {
-    console.log('Aborted.');
+  } finally {
     await session.dispose();
-    closeInteractive();
-    return;
   }
-
-  let totalCreated = 0;
-  for (const rId of targets) {
-    const progress = await semiont.mark.assist(rId, 'assessing', { instructions: INSTRUCTIONS });
-    const n = createdCount(progress);
-    totalCreated += n;
-    console.log(`  ${rId}: ${n} risk flags`);
-  }
-
-  console.log(`\nDone. Flagged ${totalCreated} risk-prone clauses.`);
-  await session.dispose();
-  closeInteractive();
 }
 
 main().catch((e) => {

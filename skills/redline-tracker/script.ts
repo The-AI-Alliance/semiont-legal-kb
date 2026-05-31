@@ -63,109 +63,110 @@ async function main(): Promise<void> {
   const session = await SemiontSession.signInHttp({ kb, storage: new InMemorySessionStorage(), baseUrl, email, password });
   const semiont = session.client;
 
-  // Step 1: fetch prior body, read new body.
-  console.log(`Fetching prior version ${priorId}...`);
-  const priorBody = await semiont.browse.resourceContent(priorId);
-  const newBody = readFileSync(absPath, 'utf-8');
+  try {
+    // Step 1: fetch prior body, read new body.
+    console.log(`Fetching prior version ${priorId}...`);
+    const priorBody = await semiont.browse.resourceContent(priorId);
+    const newBody = readFileSync(absPath, 'utf-8');
 
-  // Step 2: yield the new version as a Contract+Amendment resource.
-  console.log(`Uploading new version "${newVersionName}"...`);
-  const { resourceId: newResourceIdRaw } = await semiont.yield.resource({
-    name: newVersionName,
-    file: Buffer.from(newBody, 'utf-8'),
-    format: 'text/markdown',
-    entityTypes: ['Contract', 'Amendment'],
-    storageUri: `file://${newPath}`,
-  });
-  const newId = ridBrand(newResourceIdRaw);
-  console.log(`  + new version → ${newId}`);
-
-  // Step 3: encode the supersedes link.
-  // The new version annotation anchors at the very start of the document and tags
-  // 'supersedes' + binds a SpecificResource pointing at the prior version.
-  const headerExcerpt = newBody.split('\n').find((l) => l.trim().startsWith('#'))?.trim() ?? newVersionName;
-  const headerExact = headerExcerpt.length > 0 ? headerExcerpt : newVersionName;
-  await semiont.mark.annotation({
-    target: {
-      source: newId,
-      selector: { type: 'TextQuoteSelector', exact: headerExact },
-    },
-    motivation: 'linking',
-    body: [
-      { type: 'TextualBody', purpose: 'tagging', value: 'supersedes' },
-      { type: 'SpecificResource', source: priorId, purpose: 'linking' },
-    ],
-  });
-  console.log(`  + linked to prior version (${priorId}) via 'supersedes' annotation`);
-
-  // Step 4: section-aware diff.
-  console.log('Computing section-aware diff...');
-  const changes = diffContracts(priorBody, newBody);
-
-  if (changes.length === 0) {
-    console.log('No section-level changes detected. Done.');
-    await session.dispose();
-    closeInteractive();
-    return;
-  }
-
-  console.log(`Detected ${changes.length} change(s):`);
-  for (const c of changes.slice(0, 10)) {
-    console.log(`  - [${c.changeKind}] ${c.heading}`);
-  }
-  if (changes.length > 10) console.log(`  ... and ${changes.length - 10} more.`);
-
-  const proceed = await confirm(`Synthesize ${changes.length} VersionDelta resource(s)?`, true);
-  if (!proceed) {
-    console.log('Aborted (prior + new versions and supersedes link are still recorded).');
-    await session.dispose();
-    closeInteractive();
-    return;
-  }
-
-  let synthesized = 0;
-  for (const c of changes) {
-    const lines: string[] = [
-      `# Change: ${c.heading} (${c.changeKind})`,
-      '',
-      c.summary,
-      '',
-      `- **Section anchor:** ${c.sectionAnchor}`,
-      `- **Change kind:** ${c.changeKind}`,
-      `- **Prior version:** ${priorId}`,
-      `- **New version:** ${newId}`,
-      '',
-    ];
-    if (c.before) {
-      lines.push('## Before');
-      lines.push('');
-      lines.push(`> ${c.before}`);
-      lines.push('');
-    }
-    if (c.after) {
-      lines.push('## After');
-      lines.push('');
-      lines.push(`> ${c.after}`);
-      lines.push('');
-    }
-
-    const body = lines.join('\n') + '\n';
-    const { resourceId: deltaId } = await semiont.yield.resource({
-      name: `Δ ${c.sectionAnchor} (${c.changeKind}): ${c.heading}`,
-      file: Buffer.from(body, 'utf-8'),
+    // Step 2: yield the new version as a Contract+Amendment resource.
+    console.log(`Uploading new version "${newVersionName}"...`);
+    const { resourceId: newResourceIdRaw } = await semiont.yield.resource({
+      name: newVersionName,
+      file: Buffer.from(newBody, 'utf-8'),
       format: 'text/markdown',
-      entityTypes: ['VersionDelta'],
-      storageUri: `file://generated/version-delta-${slugify(c.sectionAnchor)}-${Date.now()}.md`,
+      entityTypes: ['Contract', 'Amendment'],
+      storageUri: `file://${newPath}`,
     });
-    synthesized++;
-    console.log(`  + Δ [${c.changeKind}] ${c.heading} → ${deltaId}`);
-  }
+    const newId = ridBrand(newResourceIdRaw);
+    console.log(`  + new version → ${newId}`);
 
-  console.log(
-    `\nDone. New version: ${newId}; ${synthesized} VersionDelta resource(s) synthesized.`,
-  );
-  await session.dispose();
-  closeInteractive();
+    // Step 3: encode the supersedes link.
+    // The new version annotation anchors at the very start of the document and tags
+    // 'supersedes' + binds a SpecificResource pointing at the prior version.
+    const headerExcerpt = newBody.split('\n').find((l) => l.trim().startsWith('#'))?.trim() ?? newVersionName;
+    const headerExact = headerExcerpt.length > 0 ? headerExcerpt : newVersionName;
+    await semiont.mark.annotation({
+      target: {
+        source: newId,
+        selector: { type: 'TextQuoteSelector', exact: headerExact },
+      },
+      motivation: 'linking',
+      body: [
+        { type: 'TextualBody', purpose: 'tagging', value: 'supersedes' },
+        { type: 'SpecificResource', source: priorId, purpose: 'linking' },
+      ],
+    });
+    console.log(`  + linked to prior version (${priorId}) via 'supersedes' annotation`);
+
+    // Step 4: section-aware diff.
+    console.log('Computing section-aware diff...');
+    const changes = diffContracts(priorBody, newBody);
+
+    if (changes.length === 0) {
+      console.log('No section-level changes detected. Done.');
+      closeInteractive();
+      return;
+    }
+
+    console.log(`Detected ${changes.length} change(s):`);
+    for (const c of changes.slice(0, 10)) {
+      console.log(`  - [${c.changeKind}] ${c.heading}`);
+    }
+    if (changes.length > 10) console.log(`  ... and ${changes.length - 10} more.`);
+
+    const proceed = await confirm(`Synthesize ${changes.length} VersionDelta resource(s)?`, true);
+    if (!proceed) {
+      console.log('Aborted (prior + new versions and supersedes link are still recorded).');
+      closeInteractive();
+      return;
+    }
+
+    let synthesized = 0;
+    for (const c of changes) {
+      const lines: string[] = [
+        `# Change: ${c.heading} (${c.changeKind})`,
+        '',
+        c.summary,
+        '',
+        `- **Section anchor:** ${c.sectionAnchor}`,
+        `- **Change kind:** ${c.changeKind}`,
+        `- **Prior version:** ${priorId}`,
+        `- **New version:** ${newId}`,
+        '',
+      ];
+      if (c.before) {
+        lines.push('## Before');
+        lines.push('');
+        lines.push(`> ${c.before}`);
+        lines.push('');
+      }
+      if (c.after) {
+        lines.push('## After');
+        lines.push('');
+        lines.push(`> ${c.after}`);
+        lines.push('');
+      }
+
+      const body = lines.join('\n') + '\n';
+      const { resourceId: deltaId } = await semiont.yield.resource({
+        name: `Δ ${c.sectionAnchor} (${c.changeKind}): ${c.heading}`,
+        file: Buffer.from(body, 'utf-8'),
+        format: 'text/markdown',
+        entityTypes: ['VersionDelta'],
+        storageUri: `file://generated/version-delta-${slugify(c.sectionAnchor)}-${Date.now()}.md`,
+      });
+      synthesized++;
+      console.log(`  + Δ [${c.changeKind}] ${c.heading} → ${deltaId}`);
+    }
+
+    console.log(
+      `\nDone. New version: ${newId}; ${synthesized} VersionDelta resource(s) synthesized.`,
+    );
+    closeInteractive();
+  } finally {
+    await session.dispose();
+  }
 }
 
 main().catch((e) => {
