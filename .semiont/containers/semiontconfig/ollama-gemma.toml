@@ -9,7 +9,7 @@ environment = "local"
 platform = "posix"
 port = 4000
 publicURL = "http://${BACKEND_HOST:-localhost}:4000"
-corsOrigin = "*"
+corsOrigin = "http://localhost:3000"
 
 [environments.local.graph]
 platform = "external"
