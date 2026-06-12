@@ -20,8 +20,8 @@ jobs:
           - .semiont/containers/Dockerfile.worker
           - .semiont/containers/Dockerfile.smelter
     steps:
-      - uses: actions/checkout@v4
-      - uses: hadolint/hadolint-action@v3.1.0
+      - uses: actions/checkout@v6
+      - uses: hadolint/hadolint-action@v3.3.0
         with:
           dockerfile: ${{ matrix.dockerfile }}
 
@@ -29,7 +29,7 @@ jobs:
     name: shellcheck
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
       - name: Run shellcheck
         uses: ludeeus/action-shellcheck@2.0.0
         with:
