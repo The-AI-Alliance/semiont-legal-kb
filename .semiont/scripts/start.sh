@@ -253,7 +253,7 @@ banner "Preflight"
 # `rm` after `stop` (both with `|| true`) makes the loop idempotent across
 # all three states the container could be in: not present, running, or
 # stopped-but-not-removed.
-for c in semiont-jaeger semiont-neo4j semiont-qdrant semiont-postgres semiont-backend semiont-worker semiont-smelter; do
+for c in semiont-jaeger semiont-neo4j semiont-qdrant semiont-postgres semiont-backend semiont-worker semiont-smelter semiont-weaver; do
   run_cmd "$RT" stop "$c" 2>/dev/null || true
   run_cmd "$RT" rm "$c" 2>/dev/null || true
 done
@@ -266,6 +266,7 @@ require_port_free 5432 "PostgreSQL"
 require_port_free 4000 "Backend"
 require_port_free 9090 "Worker"
 require_port_free 9091 "Smelter"
+require_port_free 9092 "Weaver"
 if $OBSERVE; then
   require_port_free 16686 "Jaeger UI"
   require_port_free 4318 "Jaeger OTLP"
@@ -425,6 +426,13 @@ run_cmd "$RT" build $CACHE_FLAG --tag semiont-smelter \
   --file .semiont/containers/Dockerfile.smelter .
 ok "Smelter image built"
 
+log "Building weaver image..."
+run_cmd "$RT" build $CACHE_FLAG --tag semiont-weaver \
+  --build-arg NPM_REGISTRY="$NPM_REGISTRY" \
+  --build-arg SEMIONT_CONFIG="$CONFIG_FILE" \
+  --file .semiont/containers/Dockerfile.weaver .
+ok "Weaver image built"
+
 # --- Run backend ---
 
 banner "Starting Backend"
@@ -497,6 +505,33 @@ run_cmd "$RT" run -d --rm \
 wait_for_http Smelter http://localhost:9091/health 30
 ok "Smelter healthy (http://localhost:9091)"
 
+# --- Run weaver ---
+#
+# The graph projection (Weaver) is standalone-only: the backend no longer
+# applies events to Neo4j in-process. Without this container the graph
+# stays empty and every gather 404s at the buildKnowledgeGraph barrier.
+# Health reports readiness before catch-up completes; /health exposes
+# catchUp/reconcile phases for anyone who needs to watch it converge.
+
+banner "Starting Weaver"
+
+run_cmd "$RT" run -d --rm \
+  --name semiont-weaver \
+  --memory 4G \
+  --publish 9092:9092 \
+  ${USER_ENV_ARGS[@]+"${USER_ENV_ARGS[@]}"} \
+  ${OTEL_ARGS[@]+"${OTEL_ARGS[@]}"} \
+  --env BACKEND_HOST="${HOST_ADDR}" \
+  --env OLLAMA_HOST="${HOST_ADDR}" \
+  --env QDRANT_HOST="${HOST_ADDR}" \
+  --env NEO4J_HOST="${HOST_ADDR}" \
+  --env POSTGRES_HOST="${HOST_ADDR}" \
+  --env SEMIONT_WORKER_SECRET="${SEMIONT_WORKER_SECRET}" \
+  semiont-weaver > /dev/null
+
+wait_for_http Weaver http://localhost:9092/health 30
+ok "Weaver healthy (http://localhost:9092)"
+
 # --- Tail logs ---
 
 banner "Containers"
@@ -506,7 +541,7 @@ list_containers | grep semiont- || true
 echo -e "\033[2m[$(date '+%Y-%m-%d %H:%M:%S')] start.sh containers ready\033[0m"
 
 banner "Logs"
-log "Backend: semiont-backend | Worker: semiont-worker | Smelter: semiont-smelter"
+log "Backend: semiont-backend | Worker: semiont-worker | Smelter: semiont-smelter | Weaver: semiont-weaver"
 log "Press Ctrl+C to stop"
 
 sleep 2
@@ -515,6 +550,8 @@ LOG_PIDS=("$!")
 ("$RT" logs --follow semiont-worker 2>/dev/null || true) &
 LOG_PIDS+=("$!")
 ("$RT" logs --follow semiont-smelter 2>/dev/null || true) &
+LOG_PIDS+=("$!")
+("$RT" logs --follow semiont-weaver 2>/dev/null || true) &
 LOG_PIDS+=("$!")
 
 trap 'kill "${LOG_PIDS[@]}" 2>/dev/null' EXIT

@@ -1,4 +1,4 @@
-# Semiont backend stack — backend, worker pool, smelter, plus Neo4j, Qdrant,
+# Semiont backend stack — backend, worker pool, smelter, weaver, plus Neo4j, Qdrant,
 # Ollama, and PostgreSQL. Equivalent end state to .semiont/scripts/start.sh.
 #
 # Quick start (ollama-gemma, the default):
@@ -166,6 +166,30 @@ services:
       dockerfile: .semiont/containers/Dockerfile.smelter
     ports:
       - "9091:9091"
+    mem_limit: 4g
+    environment:
+      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
+      BACKEND_HOST: backend
+      OLLAMA_HOST: ollama
+      QDRANT_HOST: qdrant
+      NEO4J_HOST: neo4j
+      POSTGRES_HOST: postgres
+      SEMIONT_WORKER_SECRET: ${SEMIONT_WORKER_SECRET:?SEMIONT_WORKER_SECRET must be set, e.g. export SEMIONT_WORKER_SECRET=$$(openssl rand -hex 32)}
+      OTEL_EXPORTER_OTLP_ENDPOINT: ${OTEL_EXPORTER_OTLP_ENDPOINT:-}
+    depends_on:
+      backend:
+        condition: service_healthy
+
+  # The graph projection is standalone-only: the backend does not apply
+  # events to Neo4j in-process. Without this service the graph stays empty
+  # and gathers fail at the buildKnowledgeGraph barrier.
+  weaver:
+    container_name: semiont-weaver
+    build:
+      <<: *semiont-build
+      dockerfile: .semiont/containers/Dockerfile.weaver
+    ports:
+      - "9092:9092"
     mem_limit: 4g
     environment:
       ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}

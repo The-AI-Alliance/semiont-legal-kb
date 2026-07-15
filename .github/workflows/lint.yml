@@ -19,6 +19,7 @@ jobs:
           - .semiont/containers/Dockerfile.backend
           - .semiont/containers/Dockerfile.worker
           - .semiont/containers/Dockerfile.smelter
+          - .semiont/containers/Dockerfile.weaver
     steps:
       - uses: actions/checkout@v4
       - uses: hadolint/hadolint-action@v3.1.0

@@ -22,6 +22,8 @@ jobs:
             dockerfile: .semiont/containers/Dockerfile.worker
           - name: smelter
             dockerfile: .semiont/containers/Dockerfile.smelter
+          - name: weaver
+            dockerfile: .semiont/containers/Dockerfile.weaver
     steps:
       - uses: actions/checkout@v4
 
