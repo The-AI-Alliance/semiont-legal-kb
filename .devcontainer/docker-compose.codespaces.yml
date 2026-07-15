@@ -16,3 +16,5 @@ services:
     mem_limit: 2g
   smelter:
     mem_limit: 1g
+  weaver:
+    mem_limit: 1g
