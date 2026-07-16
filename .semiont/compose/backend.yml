@@ -1,5 +1,12 @@
-# Semiont backend stack — backend, worker pool, smelter, weaver, plus Neo4j, Qdrant,
-# Ollama, and PostgreSQL. Equivalent end state to .semiont/scripts/start.sh.
+# Semiont stack — backend, worker pool, smelter, weaver, and frontend
+# (http://localhost:3000), plus Neo4j, Qdrant, Ollama, and PostgreSQL.
+# Equivalent end state to .semiont/scripts/start.sh.
+#
+# The four service images are pulled from GHCR (they ship config-free); the
+# selected config TOML is bind-mounted at runtime. Set SEMIONT_VERSION to choose
+# an image tag (default: latest). NOTE: relative paths in this file resolve
+# against the compose file's directory (.semiont/compose), so SEMIONT_CONFIG is
+# given relative to that.
 #
 # Quick start (ollama-gemma, the default):
 #
@@ -12,7 +19,7 @@
 # Anthropic config (faster, cloud inference):
 #
 #   export ANTHROPIC_API_KEY=<your-key>
-#   export SEMIONT_CONFIG=.semiont/containers/semiontconfig/anthropic.toml
+#   export SEMIONT_CONFIG=../containers/semiontconfig/anthropic.toml
 #   export SEMIONT_WORKER_SECRET=$(openssl rand -hex 32)
 #   docker compose -f .semiont/compose/backend.yml up
 #
@@ -24,14 +31,9 @@
 #   export OTEL_EXPORTER_OTLP_ENDPOINT=http://jaeger:4318
 #   docker compose -f .semiont/compose/backend.yml --profile observe up
 #
-# Force a fresh build:
-#   docker compose -f .semiont/compose/backend.yml build --no-cache
-
-x-semiont-build: &semiont-build
-  context: ../..
-  args:
-    NPM_REGISTRY: ${NPM_REGISTRY:-https://registry.npmjs.org}
-    SEMIONT_CONFIG: ${SEMIONT_CONFIG:-.semiont/containers/semiontconfig/ollama-gemma.toml}
+# Pin/refresh the image version (a bare `up` will not re-pull a cached :latest):
+#   export SEMIONT_VERSION=0.5.12
+#   docker compose -f .semiont/compose/backend.yml pull
 
 services:
   neo4j:
@@ -110,14 +112,13 @@ services:
 
   backend:
     container_name: semiont-backend
-    build:
-      <<: *semiont-build
-      dockerfile: .semiont/containers/Dockerfile.backend
+    image: ghcr.io/the-ai-alliance/semiont-backend:${SEMIONT_VERSION:-latest}
     ports:
       - "4000:4000"
     mem_limit: 8g
     volumes:
       - ../..:/kb
+      - ${SEMIONT_CONFIG:-../containers/semiontconfig/ollama-gemma.toml}:/home/semiont/.semiontconfig:ro
     environment:
       ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
       POSTGRES_HOST: postgres
@@ -140,12 +141,12 @@ services:
 
   worker:
     container_name: semiont-worker
-    build:
-      <<: *semiont-build
-      dockerfile: .semiont/containers/Dockerfile.worker
+    image: ghcr.io/the-ai-alliance/semiont-worker:${SEMIONT_VERSION:-latest}
     ports:
       - "9090:9090"
-    mem_limit: 8g
+    mem_limit: 2g
+    volumes:
+      - ${SEMIONT_CONFIG:-../containers/semiontconfig/ollama-gemma.toml}:/home/semiont/.semiontconfig:ro
     environment:
       ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
       BACKEND_HOST: backend
@@ -161,12 +162,12 @@ services:
 
   smelter:
     container_name: semiont-smelter
-    build:
-      <<: *semiont-build
-      dockerfile: .semiont/containers/Dockerfile.smelter
+    image: ghcr.io/the-ai-alliance/semiont-smelter:${SEMIONT_VERSION:-latest}
     ports:
       - "9091:9091"
-    mem_limit: 4g
+    mem_limit: 2g
+    volumes:
+      - ${SEMIONT_CONFIG:-../containers/semiontconfig/ollama-gemma.toml}:/home/semiont/.semiontconfig:ro
     environment:
       ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
       BACKEND_HOST: backend
@@ -185,12 +186,12 @@ services:
   # and gathers fail at the buildKnowledgeGraph barrier.
   weaver:
     container_name: semiont-weaver
-    build:
-      <<: *semiont-build
-      dockerfile: .semiont/containers/Dockerfile.weaver
+    image: ghcr.io/the-ai-alliance/semiont-weaver:${SEMIONT_VERSION:-latest}
     ports:
       - "9092:9092"
-    mem_limit: 4g
+    mem_limit: 3g
+    volumes:
+      - ${SEMIONT_CONFIG:-../containers/semiontconfig/ollama-gemma.toml}:/home/semiont/.semiontconfig:ro
     environment:
       ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
       BACKEND_HOST: backend
@@ -200,6 +201,18 @@ services:
       POSTGRES_HOST: postgres
       SEMIONT_WORKER_SECRET: ${SEMIONT_WORKER_SECRET:?SEMIONT_WORKER_SECRET must be set, e.g. export SEMIONT_WORKER_SECRET=$$(openssl rand -hex 32)}
       OTEL_EXPORTER_OTLP_ENDPOINT: ${OTEL_EXPORTER_OTLP_ENDPOINT:-}
+    depends_on:
+      backend:
+        condition: service_healthy
+
+  # Static SPA server (@semiont/frontend server.js): no config mount and no
+  # service env — the browser talks to the backend directly on localhost:4000.
+  frontend:
+    container_name: semiont-frontend
+    image: ghcr.io/the-ai-alliance/semiont-frontend:${SEMIONT_VERSION:-latest}
+    ports:
+      - "3000:3000"
+    mem_limit: 1g
     depends_on:
       backend:
         condition: service_healthy

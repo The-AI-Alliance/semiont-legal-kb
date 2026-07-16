@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-# Start a local Semiont backend with all services in containers.
+# Start a local Semiont stack — backend services and frontend — in containers.
 
 echo -e "\033[2m[$(date '+%Y-%m-%d %H:%M:%S')] start.sh started\033[0m"
 
@@ -85,7 +85,6 @@ list_containers() {
 
 CONFIG_NAME="ollama-gemma"
 CONFIG_DIR=".semiont/containers/semiontconfig"
-CACHE_FLAG=""
 ADMIN_EMAIL=""
 ADMIN_PASSWORD=""
 CLEAN_OLLAMA=false
@@ -97,7 +96,6 @@ while [[ $# -gt 0 ]]; do
   case "$1" in
     --config) CONFIG_NAME="$2"; shift 2 ;;
     --list-configs) LIST_CONFIGS=true; shift ;;
-    --no-cache) CACHE_FLAG="--no-cache"; shift ;;
     --email) ADMIN_EMAIL="$2"; shift 2 ;;
     --password) ADMIN_PASSWORD="$2"; shift 2 ;;
     --clean-ollama) CLEAN_OLLAMA=true; shift ;;
@@ -107,13 +105,13 @@ while [[ $# -gt 0 ]]; do
     --help|-h)
       echo "Usage: start.sh [options]"
       echo ""
-      echo "Start a local Semiont backend with Neo4j, Qdrant, Ollama, PostgreSQL,"
-      echo "and the Semiont API server — all in containers."
+      echo "Start a local Semiont stack with Neo4j, Qdrant, Ollama, PostgreSQL,"
+      echo "the Semiont API server, worker, smelter, weaver, and the frontend"
+      echo "(http://localhost:3000) — all in containers."
       echo ""
       echo "Options:"
       echo "  --config <name>       Semiontconfig to use (default: ollama-gemma)"
       echo "  --list-configs        List available configs and exit"
-      echo "  --no-cache            Force a fresh backend container build"
       echo "  --email <email>       Admin user email (requires --password)"
       echo "  --password <pass>     Admin user password (requires --email)"
       echo "  --clean-ollama        Remove the Ollama model cache volume and exit"
@@ -199,12 +197,48 @@ if [[ "${CLEAN_OLLAMA}" == "true" ]]; then
   exit 0
 fi
 
-NPM_REGISTRY="${NPM_REGISTRY:-https://registry.npmjs.org}"
+# Published service images are consumed by version (they ship config-free): we
+# pull each explicitly below (a `run` alone will NOT refresh a cached mutable tag
+# like :latest), and the selected config TOML is bind-mounted into every container
+# at runtime. SEMIONT_VERSION=local uses locally-built :local images (from the
+# local dev-build script) and skips the pull.
+SEMIONT_VERSION="${SEMIONT_VERSION:-latest}"
+IMAGE_REGISTRY="ghcr.io/the-ai-alliance"
+
+# Each service gets its OWN copy of the config to mount — do not "simplify"
+# this back to one shared file. Under Apple Container (one VM per container,
+# each with its own virtiofs share), mounting the same host file into a second
+# VM transiently breaks existing mounts of that file in other VMs: a 50ms-
+# interval read loop showed reads failing for ~100ms exactly when another
+# container mounted the same file. The backend is the victim: its CMD re-reads
+# ~/.semiontconfig across several CLI invocations (provision → start → useradd)
+# while the worker/smelter/weaver launch and mount theirs, and the CLI treats
+# an unreadable config as "not configured" — so a shared file intermittently
+# killed a healthy backend mid-chain ("Environment not specified"). Private
+# copies mean no host file is ever mounted twice, closing the race outright.
+#
+# docker/podman don't need this (single shared VM / native bind mounts), but
+# the copies are harmless there, so one code path serves all runtimes. The
+# staging dir is removed by teardown (which stops the stack first); on early
+# failure exits it deliberately lingers, because surviving containers still
+# mount these copies — deleting the backing files under a live mount would
+# recreate the very read-failure class this exists to prevent. Copies are made
+# fresh each run, so the repo TOMLs stay the single source of truth.
+#
+# The staging dir MUST be under /tmp, not $TMPDIR: Apple Container cannot
+# sustain mounts from /var/folders (macOS's per-user private temp) — the first
+# read succeeds, then every subsequent read fails (measured: 1 ok / 29 fail over
+# 30s, vs 30/30 ok from /tmp), which killed the backend on its second CLI
+# invocation.
+CONFIG_STAGE=$(mktemp -d /tmp/semiont-config.XXXXXX)
+for svc in backend worker smelter weaver; do
+  cp "$CONFIG_FILE" "${CONFIG_STAGE}/${svc}.toml"
+done
 
 banner "Semiont Local Backend"
 log "Container runtime: ${BOLD}${RT}${RESET}"
 log "Config: ${BOLD}${CONFIG_NAME}${RESET}"
-log "npm registry: ${DIM}${NPM_REGISTRY}${RESET}"
+log "Image version: ${BOLD}${SEMIONT_VERSION}${RESET}"
 
 # --- Resolve required env vars from config ---
 #
@@ -253,7 +287,7 @@ banner "Preflight"
 # `rm` after `stop` (both with `|| true`) makes the loop idempotent across
 # all three states the container could be in: not present, running, or
 # stopped-but-not-removed.
-for c in semiont-jaeger semiont-neo4j semiont-qdrant semiont-postgres semiont-backend semiont-worker semiont-smelter semiont-weaver; do
+for c in semiont-jaeger semiont-neo4j semiont-qdrant semiont-postgres semiont-backend semiont-worker semiont-smelter semiont-weaver semiont-frontend; do
   run_cmd "$RT" stop "$c" 2>/dev/null || true
   run_cmd "$RT" rm "$c" 2>/dev/null || true
 done
@@ -267,11 +301,33 @@ require_port_free 4000 "Backend"
 require_port_free 9090 "Worker"
 require_port_free 9091 "Smelter"
 require_port_free 9092 "Weaver"
+require_port_free 3000 "Frontend"
 if $OBSERVE; then
   require_port_free 16686 "Jaeger UI"
   require_port_free 4318 "Jaeger OTLP"
 fi
 ok "Required ports are free"
+
+# --- Pull service images ---
+#
+# Pull explicitly (up front, so a bad version/registry fails before any dep
+# containers start) — a `run` alone reuses a cached :latest and never refreshes
+# it. Pull is not portable across runtimes: Apple `container` uses `image pull`,
+# docker/podman use `pull`. SEMIONT_VERSION=local uses locally-built images.
+
+banner "Pulling Images"
+if [[ "$SEMIONT_VERSION" == "local" ]]; then
+  log "Using locally-built ${BOLD}:local${RESET} images (skipping pull)"
+else
+  for svc in backend worker smelter weaver frontend; do
+    img="${IMAGE_REGISTRY}/semiont-${svc}:${SEMIONT_VERSION}"
+    case "$RT" in
+      container) run_cmd "$RT" image pull "$img" ;;
+      *)         run_cmd "$RT" pull "$img" ;;
+    esac
+  done
+  ok "Images pulled"
+fi
 
 # --- Jaeger (observability) ---
 #
@@ -401,38 +457,6 @@ ok "PostgreSQL on port 5432"
 SEMIONT_WORKER_SECRET="${SEMIONT_WORKER_SECRET:-$(openssl rand -hex 32)}"
 log "Worker secret: ${DIM}(generated)${RESET}"
 
-# --- Build images ---
-
-banner "Building Images"
-
-log "Building backend image..."
-run_cmd "$RT" build $CACHE_FLAG --tag semiont-backend \
-  --build-arg NPM_REGISTRY="$NPM_REGISTRY" \
-  --build-arg SEMIONT_CONFIG="$CONFIG_FILE" \
-  --file .semiont/containers/Dockerfile.backend .
-ok "Backend image built"
-
-log "Building worker image..."
-run_cmd "$RT" build $CACHE_FLAG --tag semiont-worker \
-  --build-arg NPM_REGISTRY="$NPM_REGISTRY" \
-  --build-arg SEMIONT_CONFIG="$CONFIG_FILE" \
-  --file .semiont/containers/Dockerfile.worker .
-ok "Worker image built"
-
-log "Building smelter image..."
-run_cmd "$RT" build $CACHE_FLAG --tag semiont-smelter \
-  --build-arg NPM_REGISTRY="$NPM_REGISTRY" \
-  --build-arg SEMIONT_CONFIG="$CONFIG_FILE" \
-  --file .semiont/containers/Dockerfile.smelter .
-ok "Smelter image built"
-
-log "Building weaver image..."
-run_cmd "$RT" build $CACHE_FLAG --tag semiont-weaver \
-  --build-arg NPM_REGISTRY="$NPM_REGISTRY" \
-  --build-arg SEMIONT_CONFIG="$CONFIG_FILE" \
-  --file .semiont/containers/Dockerfile.weaver .
-ok "Weaver image built"
-
 # --- Run backend ---
 
 banner "Starting Backend"
@@ -444,11 +468,13 @@ if [[ -n "$ADMIN_EMAIL" && -n "$ADMIN_PASSWORD" ]]; then
   log "Admin user: ${BOLD}${ADMIN_EMAIL}${RESET}"
 fi
 
+CONFIG_MOUNT=(--volume "${CONFIG_STAGE}/backend.toml:/home/semiont/.semiontconfig:ro")
 run_cmd "$RT" run -d --rm \
   --name semiont-backend \
   --publish 4000:4000 \
   --memory 8G \
   --volume "$(pwd)":/kb \
+  "${CONFIG_MOUNT[@]}" \
   ${USER_ENV_ARGS[@]+"${USER_ENV_ARGS[@]}"} \
   ${OTEL_ARGS[@]+"${OTEL_ARGS[@]}"} \
   --env POSTGRES_HOST="$HOST_ADDR" \
@@ -457,20 +483,43 @@ run_cmd "$RT" run -d --rm \
   --env OLLAMA_HOST="${HOST_ADDR}" \
   --env SEMIONT_WORKER_SECRET="${SEMIONT_WORKER_SECRET}" \
   ${ADMIN_ARGS[@]+"${ADMIN_ARGS[@]}"} \
-  semiont-backend > /dev/null
+  "${IMAGE_REGISTRY}/semiont-backend:${SEMIONT_VERSION}" > /dev/null
 
 log "Waiting for backend health..."
 wait_for_http Backend http://localhost:4000/api/health 120
 ok "Backend healthy"
 
+# The worker/smelter/weaver reach the backend from inside a container over the
+# gateway (${HOST_ADDR}:4000), not localhost — and each fatally exits if its
+# first backend fetch fails. The health check above is from the host, so also
+# confirm the gateway path is reachable before starting the dependents (mirrors
+# the Ollama reachability probe above).
+log "Verifying backend reachable from containers..."
+backend_reachable=false
+for _ in $(seq 1 20); do
+  if "$RT" run --rm node:22-alpine sh -c "wget -q -O- http://${HOST_ADDR}:4000/api/health" > /dev/null 2>&1; then
+    backend_reachable=true
+    break
+  fi
+  sleep 1
+done
+if $backend_reachable; then
+  ok "Backend reachable from containers"
+else
+  fail "Backend not reachable from containers at ${HOST_ADDR}:4000 within 20s."
+  exit 1
+fi
+
 # --- Run worker pool ---
 
 banner "Starting Worker Pool"
 
+CONFIG_MOUNT=(--volume "${CONFIG_STAGE}/worker.toml:/home/semiont/.semiontconfig:ro")
 run_cmd "$RT" run -d --rm \
   --name semiont-worker \
-  --memory 8G \
+  --memory 2G \
   --publish 9090:9090 \
+  "${CONFIG_MOUNT[@]}" \
   ${USER_ENV_ARGS[@]+"${USER_ENV_ARGS[@]}"} \
   ${OTEL_ARGS[@]+"${OTEL_ARGS[@]}"} \
   --env BACKEND_HOST="${HOST_ADDR}" \
@@ -479,7 +528,7 @@ run_cmd "$RT" run -d --rm \
   --env QDRANT_HOST="${HOST_ADDR}" \
   --env POSTGRES_HOST="${HOST_ADDR}" \
   --env SEMIONT_WORKER_SECRET="${SEMIONT_WORKER_SECRET}" \
-  semiont-worker > /dev/null
+  "${IMAGE_REGISTRY}/semiont-worker:${SEMIONT_VERSION}" > /dev/null
 
 wait_for_http Worker http://localhost:9090/health 30
 ok "Worker pool healthy (http://localhost:9090)"
@@ -488,10 +537,12 @@ ok "Worker pool healthy (http://localhost:9090)"
 
 banner "Starting Smelter"
 
+CONFIG_MOUNT=(--volume "${CONFIG_STAGE}/smelter.toml:/home/semiont/.semiontconfig:ro")
 run_cmd "$RT" run -d --rm \
   --name semiont-smelter \
-  --memory 4G \
+  --memory 2G \
   --publish 9091:9091 \
+  "${CONFIG_MOUNT[@]}" \
   ${USER_ENV_ARGS[@]+"${USER_ENV_ARGS[@]}"} \
   ${OTEL_ARGS[@]+"${OTEL_ARGS[@]}"} \
   --env BACKEND_HOST="${HOST_ADDR}" \
@@ -500,7 +551,7 @@ run_cmd "$RT" run -d --rm \
   --env NEO4J_HOST="${HOST_ADDR}" \
   --env POSTGRES_HOST="${HOST_ADDR}" \
   --env SEMIONT_WORKER_SECRET="${SEMIONT_WORKER_SECRET}" \
-  semiont-smelter > /dev/null
+  "${IMAGE_REGISTRY}/semiont-smelter:${SEMIONT_VERSION}" > /dev/null
 
 wait_for_http Smelter http://localhost:9091/health 30
 ok "Smelter healthy (http://localhost:9091)"
@@ -515,10 +566,12 @@ ok "Smelter healthy (http://localhost:9091)"
 
 banner "Starting Weaver"
 
+CONFIG_MOUNT=(--volume "${CONFIG_STAGE}/weaver.toml:/home/semiont/.semiontconfig:ro")
 run_cmd "$RT" run -d --rm \
   --name semiont-weaver \
-  --memory 4G \
+  --memory 3G \
   --publish 9092:9092 \
+  "${CONFIG_MOUNT[@]}" \
   ${USER_ENV_ARGS[@]+"${USER_ENV_ARGS[@]}"} \
   ${OTEL_ARGS[@]+"${OTEL_ARGS[@]}"} \
   --env BACKEND_HOST="${HOST_ADDR}" \
@@ -527,12 +580,34 @@ run_cmd "$RT" run -d --rm \
   --env NEO4J_HOST="${HOST_ADDR}" \
   --env POSTGRES_HOST="${HOST_ADDR}" \
   --env SEMIONT_WORKER_SECRET="${SEMIONT_WORKER_SECRET}" \
-  semiont-weaver > /dev/null
+  "${IMAGE_REGISTRY}/semiont-weaver:${SEMIONT_VERSION}" > /dev/null
 
 wait_for_http Weaver http://localhost:9092/health 30
 ok "Weaver healthy (http://localhost:9092)"
 
-# --- Tail logs ---
+# --- Run frontend ---
+#
+# A static SPA server (@semiont/frontend server.js): no config mount and no
+# service env — the browser talks to the backend directly on localhost:4000.
+
+banner "Starting Frontend"
+
+run_cmd "$RT" run -d --rm \
+  --name semiont-frontend \
+  --memory 1G \
+  --publish 3000:3000 \
+  "${IMAGE_REGISTRY}/semiont-frontend:${SEMIONT_VERSION}" > /dev/null
+
+wait_for_http Frontend http://localhost:3000 30
+ok "Frontend on http://localhost:3000"
+
+# --- Follow logs; Ctrl+C (or a crashing service) tears down the whole stack ---
+#
+# The containers run detached, so without an explicit teardown they'd linger
+# after this script exits. Ctrl+C / termination stops the whole stack. A single
+# service that exits on its own is only reported (see the poll below) — it does
+# not take the rest down. (Under Apple Container a stopped --rm container
+# persists, so we rm after stop, the same idempotent cleanup the preflight does.)
 
 banner "Containers"
 list_containers | head -1
@@ -541,18 +616,57 @@ list_containers | grep semiont- || true
 echo -e "\033[2m[$(date '+%Y-%m-%d %H:%M:%S')] start.sh containers ready\033[0m"
 
 banner "Logs"
-log "Backend: semiont-backend | Worker: semiont-worker | Smelter: semiont-smelter | Weaver: semiont-weaver"
-log "Press Ctrl+C to stop"
+log "Following backend · worker · smelter · weaver · frontend — ${BOLD}Ctrl+C stops the stack${RESET}"
 
 sleep 2
-("$RT" logs --follow semiont-backend 2>/dev/null || true) &
-LOG_PIDS=("$!")
-("$RT" logs --follow semiont-worker 2>/dev/null || true) &
-LOG_PIDS+=("$!")
-("$RT" logs --follow semiont-smelter 2>/dev/null || true) &
-LOG_PIDS+=("$!")
-("$RT" logs --follow semiont-weaver 2>/dev/null || true) &
-LOG_PIDS+=("$!")
+LOG_PIDS=()
+for svc in backend worker smelter weaver frontend; do
+  # Prefix every line with the service name so the interleaved streams are
+  # attributable (structured logs go to stdout; container stderr is dropped).
+  ("$RT" logs --follow "semiont-${svc}" 2>/dev/null | sed "s/^/[${svc}] /" || true) &
+  LOG_PIDS+=("$!")
+done
 
-trap 'kill "${LOG_PIDS[@]}" 2>/dev/null' EXIT
-wait || true
+# Everything start.sh brings up (services + deps + observability). Stopping a
+# container that isn't running is a harmless no-op, so the list can be static.
+STACK_CONTAINERS=(
+  semiont-backend semiont-worker semiont-smelter semiont-weaver semiont-frontend
+  semiont-neo4j semiont-qdrant semiont-postgres semiont-ollama semiont-jaeger
+)
+
+teardown() {
+  trap - INT TERM EXIT   # disarm so teardown runs exactly once
+  echo ""
+  banner "Stopping"
+  kill "${LOG_PIDS[@]}" 2>/dev/null || true
+  for c in "${STACK_CONTAINERS[@]}"; do
+    "$RT" stop "$c" > /dev/null 2>&1 || true
+    "$RT" rm "$c" > /dev/null 2>&1 || true
+  done
+  rm -rf "$CONFIG_STAGE"
+  ok "Stack stopped"
+}
+trap 'teardown; exit 130' INT TERM
+trap teardown EXIT
+
+# Stream logs and block until Ctrl+C. bash 3.2 has no `wait -n`, so poll
+# container liveness: if a service exits on its own, report it once (its log
+# stream goes quiet, which is otherwise easy to miss) but leave the rest of the
+# stack running — a single service dying shouldn't take everything down. Ctrl+C
+# still stops the whole stack.
+reported=" "
+while true; do
+  running=$(list_containers || true)
+  if [ -n "$running" ]; then
+    for svc in backend worker smelter weaver frontend; do
+      if ! printf '%s\n' "$running" | grep -q "semiont-${svc}"; then
+        case "$reported" in
+          *" ${svc} "*) : ;;   # already reported this one
+          *) warn "semiont-${svc} exited — its logs stopped; the rest of the stack is still up. Ctrl+C stops everything."
+             reported="${reported}${svc} " ;;
+        esac
+      fi
+    done
+  fi
+  sleep 3
+done

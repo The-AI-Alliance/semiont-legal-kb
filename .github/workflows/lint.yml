@@ -9,23 +9,6 @@ permissions:
   contents: read
 
 jobs:
-  hadolint:
-    name: hadolint (${{ matrix.dockerfile }})
-    runs-on: ubuntu-latest
-    strategy:
-      fail-fast: false
-      matrix:
-        dockerfile:
-          - .semiont/containers/Dockerfile.backend
-          - .semiont/containers/Dockerfile.worker
-          - .semiont/containers/Dockerfile.smelter
-          - .semiont/containers/Dockerfile.weaver
-    steps:
-      - uses: actions/checkout@v4
-      - uses: hadolint/hadolint-action@v3.1.0
-        with:
-          dockerfile: ${{ matrix.dockerfile }}
-
   shellcheck:
     name: shellcheck
     runs-on: ubuntu-latest
