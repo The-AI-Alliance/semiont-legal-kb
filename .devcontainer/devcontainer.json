@@ -13,7 +13,9 @@
   },
 
   "containerEnv": {
-    "SEMIONT_CONFIG": ".semiont/containers/semiontconfig/anthropic.toml",
+    // Bind-mount source for compose; resolved relative to the compose project
+    // dir (.semiont/compose/), NOT the repo root.
+    "SEMIONT_CONFIG": "../semiontconfig/anthropic.toml",
     "OTEL_EXPORTER_OTLP_ENDPOINT": "http://jaeger:4318",
     "ANTHROPIC_API_KEY": "${localEnv:ANTHROPIC_API_KEY}"
   },

@@ -19,7 +19,7 @@
 # Anthropic config (faster, cloud inference):
 #
 #   export ANTHROPIC_API_KEY=<your-key>
-#   export SEMIONT_CONFIG=../containers/semiontconfig/anthropic.toml
+#   export SEMIONT_CONFIG=../semiontconfig/anthropic.toml
 #   export SEMIONT_WORKER_SECRET=$(openssl rand -hex 32)
 #   docker compose -f .semiont/compose/backend.yml up
 #
@@ -118,7 +118,7 @@ services:
     mem_limit: 8g
     volumes:
       - ../..:/kb
-      - ${SEMIONT_CONFIG:-../containers/semiontconfig/ollama-gemma.toml}:/home/semiont/.semiontconfig:ro
+      - ${SEMIONT_CONFIG:-../semiontconfig/ollama-gemma.toml}:/home/semiont/.semiontconfig:ro
     environment:
       ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
       POSTGRES_HOST: postgres
@@ -146,7 +146,7 @@ services:
       - "9090:9090"
     mem_limit: 2g
     volumes:
-      - ${SEMIONT_CONFIG:-../containers/semiontconfig/ollama-gemma.toml}:/home/semiont/.semiontconfig:ro
+      - ${SEMIONT_CONFIG:-../semiontconfig/ollama-gemma.toml}:/home/semiont/.semiontconfig:ro
     environment:
       ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
       BACKEND_HOST: backend
@@ -167,7 +167,7 @@ services:
       - "9091:9091"
     mem_limit: 2g
     volumes:
-      - ${SEMIONT_CONFIG:-../containers/semiontconfig/ollama-gemma.toml}:/home/semiont/.semiontconfig:ro
+      - ${SEMIONT_CONFIG:-../semiontconfig/ollama-gemma.toml}:/home/semiont/.semiontconfig:ro
     environment:
       ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
       BACKEND_HOST: backend
@@ -191,7 +191,7 @@ services:
       - "9092:9092"
     mem_limit: 3g
     volumes:
-      - ${SEMIONT_CONFIG:-../containers/semiontconfig/ollama-gemma.toml}:/home/semiont/.semiontconfig:ro
+      - ${SEMIONT_CONFIG:-../semiontconfig/ollama-gemma.toml}:/home/semiont/.semiontconfig:ro
     environment:
       ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
       BACKEND_HOST: backend

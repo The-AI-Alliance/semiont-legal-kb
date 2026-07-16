@@ -84,7 +84,7 @@ list_containers() {
 # --- Parse arguments ---
 
 CONFIG_NAME="ollama-gemma"
-CONFIG_DIR=".semiont/containers/semiontconfig"
+CONFIG_DIR=".semiont/semiontconfig"
 ADMIN_EMAIL=""
 ADMIN_PASSWORD=""
 CLEAN_OLLAMA=false
