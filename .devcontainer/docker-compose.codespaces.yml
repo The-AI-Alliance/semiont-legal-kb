@@ -18,3 +18,5 @@ services:
     mem_limit: 1g
   weaver:
     mem_limit: 1g
+  frontend:
+    mem_limit: 1g

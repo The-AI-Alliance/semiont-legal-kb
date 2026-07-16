@@ -41,8 +41,8 @@ Explore this dataset using [Semiont](https://github.com/The-AI-Alliance/semiont)
 
 This repo follows the same layout and startup flow as [`semiont-template-kb`](https://github.com/The-AI-Alliance/semiont-template-kb). See its README for full setup instructions:
 
-- [Quick Start: Local](https://github.com/The-AI-Alliance/semiont-template-kb#quick-start-local) — run the backend stack on your machine via `.semiont/scripts/start.sh`
-- [Quick Start: Codespaces](https://github.com/The-AI-Alliance/semiont-template-kb#quick-start-codespaces) — launch a preconfigured backend in the cloud
+- [Quick Start: Local](https://github.com/The-AI-Alliance/semiont-template-kb#quick-start-local) — run the Semiont stack on your machine via `.semiont/scripts/start.sh`
+- [Quick Start: Codespaces](https://github.com/The-AI-Alliance/semiont-template-kb#quick-start-codespaces) — launch a preconfigured stack in the cloud
 - [Inference Configuration](https://github.com/The-AI-Alliance/semiont-template-kb#inference-configuration) — Ollama (local) vs. Anthropic (cloud) configs
 
 ### Open in Codespaces
@@ -51,20 +51,20 @@ Install the [GitHub CLI (`gh`)](https://cli.github.com/) if you haven't already.
 
 > **Before creating:** add `ANTHROPIC_API_KEY` as a [user secret](https://github.com/settings/codespaces) with this repo selected. Otherwise the backend comes up but inference is non-functional until you add the secret and rebuild the container.
 
-Create the codespace on a premium machine for faster builds and more headroom:
+Create the codespace on a premium machine for more headroom during first-time setup:
 
 ```bash
 gh codespace create --repo The-AI-Alliance/semiont-legal-kb --machine premiumLinux
 ```
 
-Forward the backend port to your local machine, then fetch the auto-generated admin credentials:
+Forward the browser and backend ports to your local machine, then fetch the auto-generated admin credentials:
 
 ```bash
-gh codespace ports forward 4000:4000
+gh codespace ports forward 3000:3000 4000:4000
 gh codespace ssh -- cat .devcontainer/admin.json
 ```
 
-The credentials let you log in via the Semiont browser — see [Quick Start: Codespaces](https://github.com/The-AI-Alliance/semiont-template-kb#quick-start-codespaces) on the template-kb README for the full browser-side flow.
+Then open **http://localhost:3000** and sign in with those credentials.
 
 ## License
 

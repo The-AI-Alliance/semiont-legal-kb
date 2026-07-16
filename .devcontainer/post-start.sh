@@ -65,9 +65,14 @@ if $COMPOSE_OK; then
   cat <<EOF
 
 Semiont stack is up.
-  Backend API    → port 4000  (forwarded by Codespaces)
-  Jaeger UI      → port 16686
-  Neo4j Browser  → port 7474   (login: neo4j / localpass)
+  Semiont Browser → port 3000  (forwarded by Codespaces)
+  Backend API     → port 4000  (forwarded by Codespaces)
+  Jaeger UI       → port 16686
+  Neo4j Browser   → port 7474   (login: neo4j / localpass)
+
+To use it from your machine, forward both ports:
+  gh codespace ports forward 3000:3000 4000:4000
+then open http://localhost:3000 and sign in with the credentials above.
 
 EOF
   print_banner
@@ -78,7 +83,7 @@ else
   echo
   echo "── service state ─────────────────────────────────────────────────"
   docker compose "${COMPOSE_FILES[@]}" ps || true
-  for svc in backend worker smelter; do
+  for svc in backend worker smelter weaver frontend; do
     echo
     echo "── $svc (last 100 log lines) ────────────────────────────────────"
     docker compose "${COMPOSE_FILES[@]}" logs --tail=100 "$svc" 2>&1 || true
