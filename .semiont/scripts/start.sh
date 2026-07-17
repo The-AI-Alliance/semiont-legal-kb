@@ -37,17 +37,31 @@ wait_for_http() {
   exit 1
 }
 
-# Wait for Postgres to accept connections via pg_isready.
+# Wait for Postgres, in two phases. Phase 1 polls the published port from the
+# host via bash's /dev/tcp — no container spawn per attempt (the old
+# pg_isready-in-a-container loop cost a fresh VM per attempt under Apple
+# Container). Port-open implies ready with the official postgres image: its
+# init-time temporary server listens on the unix socket only, so TCP 5432
+# opens only when the real server is up. Phase 2 is a single container-side
+# probe confirming the gateway path the services actually dial (mirrors the
+# backend reachability check).
 wait_for_pg() {
-  local host=$1 port=$2 tries=${3:-30}
+  local host=$1 port=$2 tries=${3:-30} up=false
   for _ in $(seq 1 "$tries"); do
-    if "$RT" run --rm postgres:15.18-alpine pg_isready -h "$host" -p "$port" > /dev/null 2>&1; then
-      return 0
+    if (echo > "/dev/tcp/localhost/${port}") 2>/dev/null; then
+      up=true
+      break
     fi
     sleep 1
   done
-  fail "PostgreSQL did not become ready on $host:$port within ${tries}s."
-  exit 1
+  if ! $up; then
+    fail "PostgreSQL did not open port ${port} within ${tries}s."
+    exit 1
+  fi
+  if ! "$RT" run --rm busybox:1.38.0 nc -z -w 2 "$host" "$port" > /dev/null 2>&1; then
+    fail "PostgreSQL is up on localhost:${port} but not reachable from containers at ${host}:${port}."
+    exit 1
+  fi
 }
 
 # Fail if a TCP port is already in use, naming the offending process. With
