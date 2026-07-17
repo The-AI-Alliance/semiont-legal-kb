@@ -73,14 +73,6 @@ require_port_free() {
   exit 1
 }
 
-# List running containers — runtime-portable.
-list_containers() {
-  case "$RT" in
-    container) "$RT" list 2>/dev/null ;;
-    *) "$RT" ps 2>/dev/null ;;
-  esac
-}
-
 # --- Parse arguments ---
 
 CONFIG_NAME="ollama-gemma"
@@ -90,7 +82,7 @@ ADMIN_PASSWORD=""
 CLEAN_OLLAMA=false
 LIST_CONFIGS=false
 FORCE_KILL_PORTS=false
-OBSERVE=false
+OBSERVE=true
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
@@ -100,7 +92,7 @@ while [[ $# -gt 0 ]]; do
     --password) ADMIN_PASSWORD="$2"; shift 2 ;;
     --clean-ollama) CLEAN_OLLAMA=true; shift ;;
     --force-kill-ports) FORCE_KILL_PORTS=true; shift ;;
-    --observe) OBSERVE=true; shift ;;
+    --no-observe) OBSERVE=false; shift ;;
     --quiet|-q) QUIET=true; shift ;;
     --help|-h)
       echo "Usage: start.sh [options]"
@@ -116,7 +108,7 @@ while [[ $# -gt 0 ]]; do
       echo "  --password <pass>     Admin user password (requires --email)"
       echo "  --clean-ollama        Remove the Ollama model cache volume and exit"
       echo "  --force-kill-ports    Kill any non-Semiont process holding a needed port"
-      echo "  --observe             Run a Jaeger sidecar and export OTel traces + metrics to it"
+      echo "  --no-observe          Skip the Jaeger sidecar (OTel traces + metrics run by default)"
       echo "  --quiet, -q           Suppress informational output"
       echo "  --help, -h            Show this help"
       echo ""
@@ -219,11 +211,11 @@ IMAGE_REGISTRY="ghcr.io/the-ai-alliance"
 #
 # docker/podman don't need this (single shared VM / native bind mounts), but
 # the copies are harmless there, so one code path serves all runtimes. The
-# staging dir is removed by teardown (which stops the stack first); on early
-# failure exits it deliberately lingers, because surviving containers still
-# mount these copies — deleting the backing files under a live mount would
-# recreate the very read-failure class this exists to prevent. Copies are made
-# fresh each run, so the repo TOMLs stay the single source of truth.
+# staging dir deliberately outlives this script — the running containers mount
+# these copies, and deleting the backing files under a live mount would
+# recreate the very read-failure class this exists to prevent. stop.sh (and
+# the next run's preflight, after stopping the stack) removes it. Copies are
+# made fresh each run, so the repo TOMLs stay the single source of truth.
 #
 # The staging dir MUST be under /tmp, not $TMPDIR: Apple Container cannot
 # sustain mounts from /var/folders (macOS's per-user private temp) — the first
@@ -291,6 +283,13 @@ for c in semiont-jaeger semiont-neo4j semiont-qdrant semiont-postgres semiont-ba
   run_cmd "$RT" stop "$c" 2>/dev/null || true
   run_cmd "$RT" rm "$c" 2>/dev/null || true
 done
+# Staged config copies from previous runs (stop.sh also removes these). This
+# run's own staging was created above — skip it. Safe to delete the rest only
+# here, after the old stack's containers (which mounted them) are stopped.
+for d in /tmp/semiont-config.*; do
+  [[ -e "$d" && "$d" != "$CONFIG_STAGE" ]] || continue
+  rm -rf "$d"
+done
 sleep 1
 
 require_port_free 7474 "Neo4j HTTP"
@@ -331,9 +330,10 @@ fi
 
 # --- Jaeger (observability) ---
 #
-# When --observe is set, run jaegertracing/all-in-one and configure the
-# Semiont processes to push OTLP traces + metrics there. The doc's Tier 3
-# metrics export over the same endpoint, so one env var covers both.
+# On by default (skip with --no-observe): run jaegertracing/all-in-one and
+# configure the Semiont processes to push OTLP traces + metrics there. The
+# doc's Tier 3 metrics export over the same endpoint, so one env var covers
+# both.
 
 OTEL_ARGS=()
 if $OBSERVE; then
@@ -601,72 +601,31 @@ run_cmd "$RT" run -d --rm \
 wait_for_http Frontend http://localhost:3000 30
 ok "Frontend on http://localhost:3000"
 
-# --- Follow logs; Ctrl+C (or a crashing service) tears down the whole stack ---
+# --- Summary; the stack runs detached and this script exits ---
 #
-# The containers run detached, so without an explicit teardown they'd linger
-# after this script exits. Ctrl+C / termination stops the whole stack. A single
-# service that exits on its own is only reported (see the poll below) — it does
-# not take the rest down. (Under Apple Container a stopped --rm container
-# persists, so we rm after stop, the same idempotent cleanup the preflight does.)
-
-banner "Containers"
-list_containers | head -1
-list_containers | grep semiont- || true
+# Best practice for multi-service launchers (compose up -d, supabase start):
+# bring the stack up, say where everything is, and get out of the way. Logs
+# and teardown are explicit follow-up commands (logs.sh / stop.sh) rather
+# than a resident supervisor. URLs are printed bare because terminals
+# auto-link plain URLs; OSC 8 hyperlink support is uneven (Terminal.app).
 
 echo -e "\033[2m[$(date '+%Y-%m-%d %H:%M:%S')] start.sh containers ready\033[0m"
 
-banner "Logs"
-log "Following backend · worker · smelter · weaver · frontend — ${BOLD}Ctrl+C stops the stack${RESET}"
-
-sleep 2
-LOG_PIDS=()
-for svc in backend worker smelter weaver frontend; do
-  # Prefix every line with the service name so the interleaved streams are
-  # attributable (structured logs go to stdout; container stderr is dropped).
-  ("$RT" logs --follow "semiont-${svc}" 2>/dev/null | sed "s/^/[${svc}] /" || true) &
-  LOG_PIDS+=("$!")
-done
-
-# Everything start.sh brings up (services + deps + observability). Stopping a
-# container that isn't running is a harmless no-op, so the list can be static.
-STACK_CONTAINERS=(
-  semiont-backend semiont-worker semiont-smelter semiont-weaver semiont-frontend
-  semiont-neo4j semiont-qdrant semiont-postgres semiont-ollama semiont-jaeger
-)
-
-teardown() {
-  trap - INT TERM EXIT   # disarm so teardown runs exactly once
+echo ""
+echo -e "${BOLD}${GREEN}Semiont stack is up${RESET}"
+echo ""
+echo -e "  Semiont Browser    ${BOLD}http://localhost:3000${RESET}"
+echo -e "  Semiont KB         http://localhost:4000"
+echo -e "  Neo4j Browser      http://localhost:7474   ${DIM}(neo4j / localpass)${RESET}"
+echo -e "  Qdrant Dashboard   http://localhost:6333/dashboard"
+if $OBSERVE; then
+  echo -e "  Jaeger UI          http://localhost:16686"
+fi
+echo ""
+if [[ -n "$ADMIN_EMAIL" ]]; then
+  echo -e "  Sign in at http://localhost:3000 as ${BOLD}${ADMIN_EMAIL}${RESET} with your --password."
   echo ""
-  banner "Stopping"
-  kill "${LOG_PIDS[@]}" 2>/dev/null || true
-  for c in "${STACK_CONTAINERS[@]}"; do
-    "$RT" stop "$c" > /dev/null 2>&1 || true
-    "$RT" rm "$c" > /dev/null 2>&1 || true
-  done
-  rm -rf "$CONFIG_STAGE"
-  ok "Stack stopped"
-}
-trap 'teardown; exit 130' INT TERM
-trap teardown EXIT
-
-# Stream logs and block until Ctrl+C. bash 3.2 has no `wait -n`, so poll
-# container liveness: if a service exits on its own, report it once (its log
-# stream goes quiet, which is otherwise easy to miss) but leave the rest of the
-# stack running — a single service dying shouldn't take everything down. Ctrl+C
-# still stops the whole stack.
-reported=" "
-while true; do
-  running=$(list_containers || true)
-  if [ -n "$running" ]; then
-    for svc in backend worker smelter weaver frontend; do
-      if ! printf '%s\n' "$running" | grep -q "semiont-${svc}"; then
-        case "$reported" in
-          *" ${svc} "*) : ;;   # already reported this one
-          *) warn "semiont-${svc} exited — its logs stopped; the rest of the stack is still up. Ctrl+C stops everything."
-             reported="${reported}${svc} " ;;
-        esac
-      fi
-    done
-  fi
-  sleep 3
-done
+fi
+echo -e "  Follow logs:   ${BOLD}.semiont/scripts/logs.sh${RESET}"
+echo -e "  Stop stack:    ${BOLD}.semiont/scripts/stop.sh${RESET}"
+echo ""
