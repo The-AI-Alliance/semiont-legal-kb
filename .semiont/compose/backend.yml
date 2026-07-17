@@ -34,6 +34,13 @@
 # Pin/refresh the image version (a bare `up` will not re-pull a cached :latest):
 #   export SEMIONT_VERSION=0.5.12
 #   docker compose -f .semiont/compose/backend.yml pull
+#
+# The five Semiont services carry `restart: on-failure`: any crash is
+# restarted (with engine backoff). With semiont-worker >= 0.5.13 this closes a
+# self-healing loop for worker stalls — the worker detects processing with no
+# activity for 15 min and exits(1), compose restarts it, and the backend's
+# janitor re-queues the held job within 30 min. Infra services deliberately
+# have no restart policy: an infra crash usually wants eyes, not a loop.
 
 services:
   neo4j:
@@ -112,6 +119,7 @@ services:
 
   backend:
     container_name: semiont-backend
+    restart: on-failure
     image: ghcr.io/the-ai-alliance/semiont-backend:${SEMIONT_VERSION:-latest}
     ports:
       - "4000:4000"
@@ -141,6 +149,7 @@ services:
 
   worker:
     container_name: semiont-worker
+    restart: on-failure
     image: ghcr.io/the-ai-alliance/semiont-worker:${SEMIONT_VERSION:-latest}
     ports:
       - "9090:9090"
@@ -162,6 +171,7 @@ services:
 
   smelter:
     container_name: semiont-smelter
+    restart: on-failure
     image: ghcr.io/the-ai-alliance/semiont-smelter:${SEMIONT_VERSION:-latest}
     ports:
       - "9091:9091"
@@ -186,6 +196,7 @@ services:
   # and gathers fail at the buildKnowledgeGraph barrier.
   weaver:
     container_name: semiont-weaver
+    restart: on-failure
     image: ghcr.io/the-ai-alliance/semiont-weaver:${SEMIONT_VERSION:-latest}
     ports:
       - "9092:9092"
@@ -209,6 +220,7 @@ services:
   # service env — the browser talks to the backend directly on localhost:4000.
   frontend:
     container_name: semiont-frontend
+    restart: on-failure
     image: ghcr.io/the-ai-alliance/semiont-frontend:${SEMIONT_VERSION:-latest}
     ports:
       - "3000:3000"

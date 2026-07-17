@@ -664,6 +664,15 @@ ok "Frontend on http://localhost:3000"
 # and teardown are explicit follow-up commands (logs.sh / stop.sh) rather
 # than a resident supervisor. URLs are printed bare because terminals
 # auto-link plain URLs; OSC 8 hyperlink support is uneven (Terminal.app).
+#
+# Restart story, honestly: these containers run --rm with NO restart policy
+# (docker forbids --rm + --restart, and Apple `container` has no restart
+# policies) — a crashed service stays down until you rerun start.sh, whose
+# preflight recreates everything. Services fail FAST by design (e.g. the
+# worker self-exits if processing stalls >15 min, semiont-worker >= 0.5.13),
+# so a dead container is the visible, diagnosable signal — check logs.sh /
+# `<runtime> ps`. The compose path (backend.yml) adds `restart: on-failure`
+# for auto-restart; this script deliberately does not pretend to.
 
 echo -e "\033[2m[$(date '+%Y-%m-%d %H:%M:%S')] start.sh containers ready\033[0m"
 
