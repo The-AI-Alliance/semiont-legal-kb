@@ -2,14 +2,30 @@
 # Stop the whole Semiont stack — services, dependencies, and observability —
 # and clean up the staged config copies. Safe to run when nothing is up:
 # every step is a no-op then.
+#
+# Usage: stop.sh [--runtime container|docker|podman]
+# Pass the same --runtime you started with — stopping via the wrong runtime is
+# a silent no-op that leaves the real stack running. Default is first-found.
 set -uo pipefail
 
-for rt in container docker podman; do
-  if command -v "$rt" > /dev/null 2>&1; then
-    RT="$rt"
-    break
+RUNTIME=""
+if [[ "${1:-}" == "--runtime" ]]; then
+  RUNTIME="${2:-}"
+fi
+if [[ -n "$RUNTIME" ]]; then
+  if ! command -v "$RUNTIME" > /dev/null 2>&1; then
+    echo "--runtime $RUNTIME requested, but '$RUNTIME' is not on PATH." >&2
+    exit 1
   fi
-done
+  RT="$RUNTIME"
+else
+  for rt in container docker podman; do
+    if command -v "$rt" > /dev/null 2>&1; then
+      RT="$rt"
+      break
+    fi
+  done
+fi
 if [[ -z "${RT:-}" ]]; then
   echo "No container runtime found. Install Apple Container, Docker, or Podman." >&2
   exit 1

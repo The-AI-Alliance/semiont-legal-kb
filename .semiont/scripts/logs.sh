@@ -1,14 +1,29 @@
 #!/usr/bin/env bash
 # Follow the Semiont service logs, one [svc]-prefixed stream per service.
 # Ctrl+C stops *following* — it does not stop the stack (that's stop.sh).
+#
+# Usage: logs.sh [--runtime container|docker|podman]
+# Pass the same --runtime you started with; default is first-found.
 set -uo pipefail
 
-for rt in container docker podman; do
-  if command -v "$rt" > /dev/null 2>&1; then
-    RT="$rt"
-    break
+RUNTIME=""
+if [[ "${1:-}" == "--runtime" ]]; then
+  RUNTIME="${2:-}"
+fi
+if [[ -n "$RUNTIME" ]]; then
+  if ! command -v "$RUNTIME" > /dev/null 2>&1; then
+    echo "--runtime $RUNTIME requested, but '$RUNTIME' is not on PATH." >&2
+    exit 1
   fi
-done
+  RT="$RUNTIME"
+else
+  for rt in container docker podman; do
+    if command -v "$rt" > /dev/null 2>&1; then
+      RT="$rt"
+      break
+    fi
+  done
+fi
 if [[ -z "${RT:-}" ]]; then
   echo "No container runtime found. Install Apple Container, Docker, or Podman." >&2
   exit 1

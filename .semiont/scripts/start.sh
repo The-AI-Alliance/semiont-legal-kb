@@ -62,6 +62,28 @@ wait_for_pg() {
   fi
 }
 
+# Run one of the three make-meaning sidecars (worker / smelter / weaver).
+# They are identical in shape — private config copy mounted at
+# ~/.semiontconfig, gateway addressing, worker secret, health wait — and
+# differ only in name, display label, port, and memory. The backend and
+# frontend keep bespoke blocks below: their differences (the /kb mount and
+# admin bootstrap; a config-free static server) are the point.
+start_sidecar() {
+  local svc=$1 label=$2 port=$3 mem=$4
+  run_cmd "$RT" run -d --rm \
+    --name "semiont-${svc}" \
+    --memory "$mem" \
+    --publish "${port}:${port}" \
+    --volume "${CONFIG_STAGE}/${svc}.toml:/home/semiont/.semiontconfig:ro" \
+    ${USER_ENV_ARGS[@]+"${USER_ENV_ARGS[@]}"} \
+    ${OTEL_ARGS[@]+"${OTEL_ARGS[@]}"} \
+    "${GATEWAY_ENV_ARGS[@]}" \
+    --env SEMIONT_WORKER_SECRET="${SEMIONT_WORKER_SECRET}" \
+    "${IMAGE_REGISTRY}/semiont-${svc}:${SEMIONT_VERSION}" > /dev/null
+  wait_for_http "$label" "http://localhost:${port}/health" 30
+  ok "$label healthy (http://localhost:${port})"
+}
+
 # Fail if a TCP port is already in use, naming the offending process(es). With
 # FORCE_KILL_PORTS=true, kill the holders and verify the port is free instead.
 # lsof -ti prints one PID per line when several processes hold a port
@@ -103,6 +125,7 @@ CLEAN_OLLAMA=false
 LIST_CONFIGS=false
 FORCE_KILL_PORTS=false
 OBSERVE=true
+RUNTIME=""
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
@@ -112,6 +135,7 @@ while [[ $# -gt 0 ]]; do
     --password) ADMIN_PASSWORD="$2"; shift 2 ;;
     --clean-ollama) CLEAN_OLLAMA=true; shift ;;
     --force-kill-ports) FORCE_KILL_PORTS=true; shift ;;
+    --runtime) RUNTIME="$2"; shift 2 ;;
     --no-observe) OBSERVE=false; shift ;;
     --quiet|-q) QUIET=true; shift ;;
     --help|-h)
@@ -128,6 +152,7 @@ while [[ $# -gt 0 ]]; do
       echo "  --password <pass>     Admin user password (requires --email)"
       echo "  --clean-ollama        Remove the Ollama model cache volume and exit"
       echo "  --force-kill-ports    Kill any non-Semiont process holding a needed port"
+      echo "  --runtime <name>      Container runtime: container, docker, or podman (default: first found)"
       echo "  --no-observe          Skip the Jaeger sidecar (OTel traces + metrics run by default)"
       echo "  --quiet, -q           Suppress informational output"
       echo "  --help, -h            Show this help"
@@ -200,17 +225,32 @@ if [[ ! -f "${CONFIG_FILE}" ]]; then
   exit 1
 fi
 
-# --- Detect container runtime ---
+# --- Select container runtime ---
+#
+# --runtime forces a specific one (e.g. testing the docker path on a machine
+# where Apple Container would win the auto-detect); default is first-found.
 
-for rt in container docker podman; do
-  if command -v "$rt" > /dev/null 2>&1; then
-    RT="$rt"
-    break
+if [[ -n "$RUNTIME" ]]; then
+  case "$RUNTIME" in
+    container|docker|podman) ;;
+    *) fail "Unknown --runtime '$RUNTIME' (expected: container, docker, or podman)"; exit 1 ;;
+  esac
+  if ! command -v "$RUNTIME" > /dev/null 2>&1; then
+    fail "--runtime $RUNTIME requested, but '$RUNTIME' is not on PATH."
+    exit 1
   fi
-done
-if [[ -z "${RT:-}" ]]; then
-  fail "No container runtime found. Install Apple Container, Docker, or Podman."
-  exit 1
+  RT="$RUNTIME"
+else
+  for rt in container docker podman; do
+    if command -v "$rt" > /dev/null 2>&1; then
+      RT="$rt"
+      break
+    fi
+  done
+  if [[ -z "${RT:-}" ]]; then
+    fail "No container runtime found. Install Apple Container, Docker, or Podman."
+    exit 1
+  fi
 fi
 
 # Handle --clean-ollama
@@ -231,36 +271,6 @@ fi
 # local dev-build script) and skips the pull.
 SEMIONT_VERSION="${SEMIONT_VERSION:-latest}"
 IMAGE_REGISTRY="ghcr.io/the-ai-alliance"
-
-# Each service gets its OWN copy of the config to mount — do not "simplify"
-# this back to one shared file. Under Apple Container (one VM per container,
-# each with its own virtiofs share), mounting the same host file into a second
-# VM transiently breaks existing mounts of that file in other VMs: a 50ms-
-# interval read loop showed reads failing for ~100ms exactly when another
-# container mounted the same file. The backend is the victim: its CMD re-reads
-# ~/.semiontconfig across several CLI invocations (provision → start → useradd)
-# while the worker/smelter/weaver launch and mount theirs, and the CLI treats
-# an unreadable config as "not configured" — so a shared file intermittently
-# killed a healthy backend mid-chain ("Environment not specified"). Private
-# copies mean no host file is ever mounted twice, closing the race outright.
-#
-# docker/podman don't need this (single shared VM / native bind mounts), but
-# the copies are harmless there, so one code path serves all runtimes. The
-# staging dir deliberately outlives this script — the running containers mount
-# these copies, and deleting the backing files under a live mount would
-# recreate the very read-failure class this exists to prevent. stop.sh (and
-# the next run's preflight, after stopping the stack) removes it. Copies are
-# made fresh each run, so the repo TOMLs stay the single source of truth.
-#
-# The staging dir MUST be under /tmp, not $TMPDIR: Apple Container cannot
-# sustain mounts from /var/folders (macOS's per-user private temp) — the first
-# read succeeds, then every subsequent read fails (measured: 1 ok / 29 fail over
-# 30s, vs 30/30 ok from /tmp), which killed the backend on its second CLI
-# invocation.
-CONFIG_STAGE=$(mktemp -d /tmp/semiont-config.XXXXXX)
-for svc in backend worker smelter weaver; do
-  cp "$CONFIG_FILE" "${CONFIG_STAGE}/${svc}.toml"
-done
 
 banner "Semiont Local Backend"
 log "Container runtime: ${BOLD}${RT}${RESET}"
@@ -301,6 +311,16 @@ if [[ -z "$HOST_ADDR" ]]; then
 fi
 log "Host address: ${DIM}${HOST_ADDR}${RESET}"
 
+# Every service dials its dependencies through the host gateway (hub-and-spoke
+# over published ports — the addressing model all runtimes share).
+GATEWAY_ENV_ARGS=(
+  --env BACKEND_HOST="$HOST_ADDR"
+  --env OLLAMA_HOST="$HOST_ADDR"
+  --env NEO4J_HOST="$HOST_ADDR"
+  --env QDRANT_HOST="$HOST_ADDR"
+  --env POSTGRES_HOST="$HOST_ADDR"
+)
+
 # --- Preflight: stop prior Semiont containers, verify required ports are free ---
 #
 # We do this up front (rather than per-service) so a port conflict surfaces
@@ -318,13 +338,11 @@ for c in semiont-jaeger semiont-neo4j semiont-qdrant semiont-postgres semiont-ba
   run_cmd "$RT" stop "$c" 2>/dev/null || true
   run_cmd "$RT" rm "$c" 2>/dev/null || true
 done
-# Staged config copies from previous runs (stop.sh also removes these). This
-# run's own staging was created above — skip it. Safe to delete the rest only
-# here, after the old stack's containers (which mounted them) are stopped.
-for d in /tmp/semiont-config.*; do
-  [[ -e "$d" && "$d" != "$CONFIG_STAGE" ]] || continue
-  rm -rf "$d"
-done
+# Staged config copies from previous runs (stop.sh also removes these). Safe
+# to delete only here, after the old stack's containers (which mounted them)
+# are stopped — and this run's own staging is deliberately created below,
+# after this sweep, so no exclusion dance is needed.
+rm -rf /tmp/semiont-config.* 2>/dev/null || true
 sleep 1
 
 require_port_free 7474 "Neo4j HTTP"
@@ -341,6 +359,40 @@ if $OBSERVE; then
   require_port_free 4318 "Jaeger OTLP"
 fi
 ok "Required ports are free"
+
+# --- Stage per-service config copies ---
+#
+# Each service gets its OWN copy of the config to mount — do not "simplify"
+# this back to one shared file. Under Apple Container (one VM per container,
+# each with its own virtiofs share), mounting the same host file into a second
+# VM transiently breaks existing mounts of that file in other VMs: a 50ms-
+# interval read loop showed reads failing for ~100ms exactly when another
+# container mounted the same file. The backend is the victim: its CMD re-reads
+# ~/.semiontconfig across several CLI invocations (provision → start → useradd)
+# while the worker/smelter/weaver launch and mount theirs, and the CLI treats
+# an unreadable config as "not configured" — so a shared file intermittently
+# killed a healthy backend mid-chain ("Environment not specified"). Private
+# copies mean no host file is ever mounted twice, closing the race outright.
+#
+# docker/podman don't need this (single shared VM / native bind mounts), but
+# the copies are harmless there, so one code path serves all runtimes. The
+# staging dir deliberately outlives this script — the running containers mount
+# these copies, and deleting the backing files under a live mount would
+# recreate the very read-failure class this exists to prevent. stop.sh (and
+# the next run's preflight sweep, which runs before this point) removes it.
+# Copies are made fresh each run, so the repo TOMLs stay the single source of
+# truth.
+#
+# The staging dir MUST be under /tmp, not $TMPDIR: Apple Container cannot
+# sustain mounts from /var/folders (macOS's per-user private temp) — the first
+# read succeeds, then every subsequent read fails (measured: 1 ok / 29 fail over
+# 30s, vs 30/30 ok from /tmp), which killed the backend on its second CLI
+# invocation.
+
+CONFIG_STAGE=$(mktemp -d /tmp/semiont-config.XXXXXX)
+for svc in backend worker smelter weaver; do
+  cp "$CONFIG_FILE" "${CONFIG_STAGE}/${svc}.toml"
+done
 
 # --- Pull service images ---
 #
@@ -385,11 +437,10 @@ fi
 
 # --- Neo4j ---
 
-NEO4J_NAME="semiont-neo4j"
 banner "Neo4j"
 
 run_cmd "$RT" run -d --rm \
-  --name "$NEO4J_NAME" \
+  --name semiont-neo4j \
   -p 7474:7474 \
   -p 7687:7687 \
   -e NEO4J_AUTH=neo4j/localpass \
@@ -401,11 +452,10 @@ ok "Neo4j on bolt://localhost:7687 (browser: http://localhost:7474)"
 
 # --- Qdrant ---
 
-QDRANT_NAME="semiont-qdrant"
 banner "Qdrant"
 
 run_cmd "$RT" run -d --rm \
-  --name "$QDRANT_NAME" \
+  --name semiont-qdrant \
   -p 6333:6333 \
   qdrant/qdrant:v1.18.3 > /dev/null
 
@@ -474,11 +524,10 @@ fi
 
 # --- PostgreSQL ---
 
-POSTGRES_NAME="semiont-postgres"
 banner "PostgreSQL"
 
 run_cmd "$RT" run -d --rm \
-  --name "$POSTGRES_NAME" \
+  --name semiont-postgres \
   -p 5432:5432 \
   -e POSTGRES_PASSWORD=localpass \
   -e POSTGRES_DB=semiont \
@@ -503,13 +552,15 @@ if [[ -n "$ADMIN_EMAIL" && -n "$ADMIN_PASSWORD" ]]; then
   log "Admin user: ${BOLD}${ADMIN_EMAIL}${RESET}"
 fi
 
-CONFIG_MOUNT=(--volume "${CONFIG_STAGE}/backend.toml:/home/semiont/.semiontconfig:ro")
+# Note: no GATEWAY_ENV_ARGS here — the backend takes the four dependency
+# hosts but must NOT receive BACKEND_HOST (publicURL derives from it;
+# see the DID/site.domain history before changing this).
 run_cmd "$RT" run -d --rm \
   --name semiont-backend \
   --publish 4000:4000 \
   --memory 8G \
   --volume "$(pwd)":/kb \
-  "${CONFIG_MOUNT[@]}" \
+  --volume "${CONFIG_STAGE}/backend.toml:/home/semiont/.semiontconfig:ro" \
   ${USER_ENV_ARGS[@]+"${USER_ENV_ARGS[@]}"} \
   ${OTEL_ARGS[@]+"${OTEL_ARGS[@]}"} \
   --env POSTGRES_HOST="$HOST_ADDR" \
@@ -545,80 +596,22 @@ else
   exit 1
 fi
 
-# --- Run worker pool ---
-
-banner "Starting Worker Pool"
-
-CONFIG_MOUNT=(--volume "${CONFIG_STAGE}/worker.toml:/home/semiont/.semiontconfig:ro")
-run_cmd "$RT" run -d --rm \
-  --name semiont-worker \
-  --memory 2G \
-  --publish 9090:9090 \
-  "${CONFIG_MOUNT[@]}" \
-  ${USER_ENV_ARGS[@]+"${USER_ENV_ARGS[@]}"} \
-  ${OTEL_ARGS[@]+"${OTEL_ARGS[@]}"} \
-  --env BACKEND_HOST="${HOST_ADDR}" \
-  --env OLLAMA_HOST="${HOST_ADDR}" \
-  --env NEO4J_HOST="${HOST_ADDR}" \
-  --env QDRANT_HOST="${HOST_ADDR}" \
-  --env POSTGRES_HOST="${HOST_ADDR}" \
-  --env SEMIONT_WORKER_SECRET="${SEMIONT_WORKER_SECRET}" \
-  "${IMAGE_REGISTRY}/semiont-worker:${SEMIONT_VERSION}" > /dev/null
-
-wait_for_http Worker http://localhost:9090/health 30
-ok "Worker pool healthy (http://localhost:9090)"
-
-# --- Run smelter ---
-
-banner "Starting Smelter"
-
-CONFIG_MOUNT=(--volume "${CONFIG_STAGE}/smelter.toml:/home/semiont/.semiontconfig:ro")
-run_cmd "$RT" run -d --rm \
-  --name semiont-smelter \
-  --memory 2G \
-  --publish 9091:9091 \
-  "${CONFIG_MOUNT[@]}" \
-  ${USER_ENV_ARGS[@]+"${USER_ENV_ARGS[@]}"} \
-  ${OTEL_ARGS[@]+"${OTEL_ARGS[@]}"} \
-  --env BACKEND_HOST="${HOST_ADDR}" \
-  --env OLLAMA_HOST="${HOST_ADDR}" \
-  --env QDRANT_HOST="${HOST_ADDR}" \
-  --env NEO4J_HOST="${HOST_ADDR}" \
-  --env POSTGRES_HOST="${HOST_ADDR}" \
-  --env SEMIONT_WORKER_SECRET="${SEMIONT_WORKER_SECRET}" \
-  "${IMAGE_REGISTRY}/semiont-smelter:${SEMIONT_VERSION}" > /dev/null
-
-wait_for_http Smelter http://localhost:9091/health 30
-ok "Smelter healthy (http://localhost:9091)"
-
-# --- Run weaver ---
+# --- Run the make-meaning sidecars ---
 #
-# The graph projection (Weaver) is standalone-only: the backend no longer
-# applies events to Neo4j in-process. Without this container the graph
-# stays empty and every gather 404s at the buildKnowledgeGraph barrier.
-# Health reports readiness before catch-up completes; /health exposes
+# The weaver note: the graph projection is standalone-only — the backend no
+# longer applies events to Neo4j in-process. Without the weaver the graph
+# stays empty and every gather 404s at the buildKnowledgeGraph barrier. Its
+# health reports readiness before catch-up completes; /health exposes
 # catchUp/reconcile phases for anyone who needs to watch it converge.
 
+banner "Starting Worker Pool"
+start_sidecar worker "Worker pool" 9090 2G
+
+banner "Starting Smelter"
+start_sidecar smelter "Smelter" 9091 2G
+
 banner "Starting Weaver"
-
-CONFIG_MOUNT=(--volume "${CONFIG_STAGE}/weaver.toml:/home/semiont/.semiontconfig:ro")
-run_cmd "$RT" run -d --rm \
-  --name semiont-weaver \
-  --memory 3G \
-  --publish 9092:9092 \
-  "${CONFIG_MOUNT[@]}" \
-  ${USER_ENV_ARGS[@]+"${USER_ENV_ARGS[@]}"} \
-  ${OTEL_ARGS[@]+"${OTEL_ARGS[@]}"} \
-  --env BACKEND_HOST="${HOST_ADDR}" \
-  --env OLLAMA_HOST="${HOST_ADDR}" \
-  --env QDRANT_HOST="${HOST_ADDR}" \
-  --env NEO4J_HOST="${HOST_ADDR}" \
-  --env POSTGRES_HOST="${HOST_ADDR}" \
-  --env SEMIONT_WORKER_SECRET="${SEMIONT_WORKER_SECRET}" \
-  "${IMAGE_REGISTRY}/semiont-weaver:${SEMIONT_VERSION}" > /dev/null
-
-wait_for_http Weaver http://localhost:9092/health 30
-ok "Weaver healthy (http://localhost:9092)"
+start_sidecar weaver "Weaver" 9092 3G
 
 # --- Run frontend ---
 #
