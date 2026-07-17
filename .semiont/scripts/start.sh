@@ -302,11 +302,39 @@ for var in $(config_required_vars); do
 done
 
 # --- Resolve host address for container networking ---
+#
+# Every inter-service hop dials the HOST (hub-and-spoke over published ports),
+# so this must be an address that reaches the host FROM INSIDE a container —
+# and that is runtime-specific:
+#   - Apple container: one VM per container; the default gateway on the shared
+#     bridge IS the Mac host. The gateway probe is correct.
+#   - Docker Desktop (mac/win): the bridge gateway is internal to Docker's
+#     Linux VM and does NOT reach the host (measured: host Ollama on 0.0.0.0
+#     was unreachable at 172.17.0.1). The injected DNS name
+#     host.docker.internal does. Docker on Linux injects no such name by
+#     default — there the bridge gateway DOES reach host-published ports, so
+#     the gateway probe is the fallback.
+#   - podman: same pattern with host.containers.internal.
+# Probe, don't assume: prefer the runtime's host alias when it resolves
+# inside a container; otherwise fall back to the default-gateway probe.
 
-HOST_ADDR=$("$RT" run --rm busybox:1.38.0 sh -c "ip route | awk '/default/{print \$3}'" 2>/dev/null | tr -d '[:space:]')
+resolve_host_addr() {
+  local alias=""
+  case "$RT" in
+    docker) alias=host.docker.internal ;;
+    podman) alias=host.containers.internal ;;
+  esac
+  if [[ -n "$alias" ]] && "$RT" run --rm busybox:1.38.0 nslookup "$alias" > /dev/null 2>&1; then
+    echo "$alias"
+    return
+  fi
+  "$RT" run --rm busybox:1.38.0 sh -c "ip route | awk '/default/{print \$3}'" 2>/dev/null | tr -d '[:space:]'
+}
+
+HOST_ADDR=$(resolve_host_addr)
 if [[ -z "$HOST_ADDR" ]]; then
   fail "Could not determine host address for container networking."
-  echo "  The default-gateway probe (alpine container) returned no result." >&2
+  echo "  Neither the runtime's host alias nor the default-gateway probe returned a result." >&2
   exit 1
 fi
 log "Host address: ${DIM}${HOST_ADDR}${RESET}"
