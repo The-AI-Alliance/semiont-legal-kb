@@ -10,6 +10,15 @@ platform = "posix"
 port = 4000
 publicURL = "http://${BACKEND_HOST:-localhost}:4000"
 
+# The KB's permanent identity: every did:web the backend mints (users and
+# software agents, stamped into the committed event log) carries this host.
+# It names the KB itself — the repo — not any deployment of it, so it must be
+# a committed literal: identical for every contributor, every runtime, every
+# launch path. Never env-templated (identity must not vary per boot), never a
+# machine address.
+[environments.local.site]
+domain = "the-ai-alliance.github.io:semiont-legal-kb"
+
 [environments.local.graph]
 platform = "external"
 type = "neo4j"
