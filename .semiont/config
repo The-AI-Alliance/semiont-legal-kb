@@ -6,7 +6,10 @@ version = "0.1.0"
 sync = true
 
 [site]
-domain = "localhost:8080"
+# Permanent did:web identity for everything this KB mints (stamped into the
+# committed event log). Names the repo, not a deployment — a committed literal,
+# never env-templated, never a machine address.
+domain = "the-ai-alliance.github.io:semiont-legal-kb"
 siteName = "Legal Knowledge Base (Synthetic Documents)"
 adminEmail = ""
 oauthAllowedDomains = ["example.com"]
