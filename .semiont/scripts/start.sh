@@ -5,8 +5,6 @@ set -euo pipefail
 
 echo -e "\033[2m[$(date '+%Y-%m-%d %H:%M:%S')] start.sh started\033[0m"
 
-cd "$(git rev-parse --show-toplevel)"
-
 # --- Colors & output helpers ---
 
 BOLD='\033[1m'
@@ -149,6 +147,21 @@ while [[ $# -gt 0 ]]; do
     *) fail "Unknown argument: $1"; exit 1 ;;
   esac
 done
+
+# --- Resolve KB root ---
+#
+# Everything below is repo-root-relative. A git clone is required — the backend
+# versions the event log via git — so fail with instructions rather than git's
+# opaque "not a repository" fatal when someone used GitHub's "Download ZIP"
+# (or has no git at all). Deliberately after arg parsing so --help works
+# anywhere.
+
+if ! ROOT=$(git rev-parse --show-toplevel 2>/dev/null); then
+  fail "This must run inside a git clone of the KB (the backend versions the event log via git)."
+  echo "  If you used GitHub's 'Download ZIP', clone the repository instead:  git clone <repo-url>" >&2
+  exit 1
+fi
+cd "$ROOT"
 
 # --- Validate admin credentials ---
 
