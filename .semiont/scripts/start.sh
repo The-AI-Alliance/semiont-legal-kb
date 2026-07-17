@@ -41,7 +41,7 @@ wait_for_http() {
 wait_for_pg() {
   local host=$1 port=$2 tries=${3:-30}
   for _ in $(seq 1 "$tries"); do
-    if "$RT" run --rm postgres:15-alpine pg_isready -h "$host" -p "$port" > /dev/null 2>&1; then
+    if "$RT" run --rm postgres:15.18-alpine pg_isready -h "$host" -p "$port" > /dev/null 2>&1; then
       return 0
     fi
     sleep 1
@@ -258,7 +258,7 @@ done
 
 # --- Resolve host address for container networking ---
 
-HOST_ADDR=$("$RT" run --rm node:22-alpine sh -c "ip route | awk '/default/{print \$3}'" 2>/dev/null | tr -d '[:space:]')
+HOST_ADDR=$("$RT" run --rm busybox:1.38.0 sh -c "ip route | awk '/default/{print \$3}'" 2>/dev/null | tr -d '[:space:]')
 if [[ -z "$HOST_ADDR" ]]; then
   fail "Could not determine host address for container networking."
   echo "  The default-gateway probe (alpine container) returned no result." >&2
@@ -342,7 +342,7 @@ if $OBSERVE; then
     --name semiont-jaeger \
     -p 16686:16686 \
     -p 4318:4318 \
-    jaegertracing/all-in-one:latest > /dev/null
+    jaegertracing/all-in-one:1.76.0 > /dev/null
   wait_for_http "Jaeger UI" http://localhost:16686 30
   ok "Jaeger UI on http://localhost:16686 (OTLP collector: ${HOST_ADDR}:4318)"
   OTEL_ARGS=(--env OTEL_EXPORTER_OTLP_ENDPOINT="http://${HOST_ADDR}:4318")
@@ -359,7 +359,7 @@ run_cmd "$RT" run -d --rm \
   -p 7687:7687 \
   -e NEO4J_AUTH=neo4j/localpass \
   -e NEO4J_ACCEPT_LICENSE_AGREEMENT=yes \
-  neo4j:5-community > /dev/null
+  neo4j:5.26.28-community > /dev/null
 
 wait_for_http Neo4j http://localhost:7474 30
 ok "Neo4j on bolt://localhost:7687 (browser: http://localhost:7474)"
@@ -372,7 +372,7 @@ banner "Qdrant"
 run_cmd "$RT" run -d --rm \
   --name "$QDRANT_NAME" \
   -p 6333:6333 \
-  qdrant/qdrant > /dev/null
+  qdrant/qdrant:v1.18.3 > /dev/null
 
 wait_for_http Qdrant http://localhost:6333/readyz 15
 ok "Qdrant on http://localhost:6333"
@@ -384,7 +384,7 @@ banner "Ollama"
 
 if curl -sf http://localhost:11434/api/version > /dev/null 2>&1; then
   # Host Ollama detected — verify it's reachable from containers
-  if "${RT}" run --rm node:22-alpine sh -c "wget -q -O- http://${HOST_ADDR}:11434/api/version" > /dev/null 2>&1; then
+  if "${RT}" run --rm busybox:1.38.0 sh -c "wget -q -O- http://${HOST_ADDR}:11434/api/version" > /dev/null 2>&1; then
     ok "Using host Ollama at http://localhost:11434"
   else
     echo ""
@@ -447,7 +447,7 @@ run_cmd "$RT" run -d --rm \
   -p 5432:5432 \
   -e POSTGRES_PASSWORD=localpass \
   -e POSTGRES_DB=semiont \
-  postgres:15-alpine > /dev/null
+  postgres:15.18-alpine > /dev/null
 
 wait_for_pg "$HOST_ADDR" 5432 20
 ok "PostgreSQL on port 5432"
@@ -497,7 +497,7 @@ ok "Backend healthy"
 log "Verifying backend reachable from containers..."
 backend_reachable=false
 for _ in $(seq 1 20); do
-  if "$RT" run --rm node:22-alpine sh -c "wget -q -O- http://${HOST_ADDR}:4000/api/health" > /dev/null 2>&1; then
+  if "$RT" run --rm busybox:1.38.0 sh -c "wget -q -O- http://${HOST_ADDR}:4000/api/health" > /dev/null 2>&1; then
     backend_reachable=true
     break
   fi

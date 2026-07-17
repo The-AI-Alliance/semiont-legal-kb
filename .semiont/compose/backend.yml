@@ -38,7 +38,7 @@
 services:
   neo4j:
     container_name: semiont-neo4j
-    image: neo4j:5-community
+    image: neo4j:5.26.28-community
     ports:
       - "7474:7474"
       - "7687:7687"
@@ -46,7 +46,7 @@ services:
       NEO4J_AUTH: neo4j/localpass
       NEO4J_ACCEPT_LICENSE_AGREEMENT: "yes"
     healthcheck:
-      # neo4j:5-community has wget but no curl
+      # the neo4j community image has wget but no curl
       test: ["CMD-SHELL", "wget --quiet --tries=1 --spider http://localhost:7474 || exit 1"]
       interval: 10s
       timeout: 5s
@@ -55,7 +55,7 @@ services:
 
   qdrant:
     container_name: semiont-qdrant
-    image: qdrant/qdrant
+    image: qdrant/qdrant:v1.18.3
     ports:
       - "6333:6333"
     healthcheck:
@@ -85,7 +85,7 @@ services:
 
   postgres:
     container_name: semiont-postgres
-    image: postgres:15-alpine
+    image: postgres:15.18-alpine
     ports:
       - "5432:5432"
     environment:
@@ -99,7 +99,7 @@ services:
 
   jaeger:
     container_name: semiont-jaeger
-    image: jaegertracing/all-in-one:latest
+    image: jaegertracing/all-in-one:1.76.0
     profiles: ["observe"]
     ports:
       - "16686:16686"
