@@ -64,25 +64,33 @@ wait_for_pg() {
   fi
 }
 
-# Fail if a TCP port is already in use, naming the offending process. With
-# FORCE_KILL_PORTS=true, kill the holder and verify the port is free instead.
+# Fail if a TCP port is already in use, naming the offending process(es). With
+# FORCE_KILL_PORTS=true, kill the holders and verify the port is free instead.
+# lsof -ti prints one PID per line when several processes hold a port
+# (parent+child servers, SO_REUSEPORT), so every consumer iterates per line —
+# a quoted "$pids" would hand kill/ps a single newline-embedded argument.
 require_port_free() {
-  local port=$1 service=$2 pid proc
-  pid=$(lsof -ti ":$port" 2>/dev/null || echo "")
-  if [[ -z "$pid" ]]; then return 0; fi
-  proc=$(ps -p "$pid" -o comm= 2>/dev/null || echo "<unknown>")
+  local port=$1 service=$2 pids p procs
+  pids=$(lsof -ti ":$port" 2>/dev/null || true)
+  if [[ -z "$pids" ]]; then return 0; fi
+  procs=""
+  while IFS= read -r p; do
+    procs="${procs:+$procs, }${p} ($(ps -p "$p" -o comm= 2>/dev/null || echo '<unknown>'))"
+  done <<< "$pids"
   if $FORCE_KILL_PORTS; then
-    warn "Port $port (needed for $service) held by PID $pid ($proc) — killing (--force-kill-ports)."
-    kill "$pid" 2>/dev/null || true
+    warn "Port $port (needed for $service) held by ${procs} — killing (--force-kill-ports)."
+    while IFS= read -r p; do
+      kill "$p" 2>/dev/null || true
+    done <<< "$pids"
     sleep 1
-    pid=$(lsof -ti ":$port" 2>/dev/null || echo "")
-    if [[ -n "$pid" ]]; then
-      fail "Port $port still held after kill (PID $pid)."
+    pids=$(lsof -ti ":$port" 2>/dev/null || true)
+    if [[ -n "$pids" ]]; then
+      fail "Port $port still held after kill ($(echo "$pids" | tr '\n' ' '))."
       exit 1
     fi
     return 0
   fi
-  fail "Port $port (needed for $service) is held by PID $pid ($proc)."
+  fail "Port $port (needed for $service) is held by ${procs}."
   echo "  Stop the conflicting process and re-run, or pass --force-kill-ports." >&2
   exit 1
 }
