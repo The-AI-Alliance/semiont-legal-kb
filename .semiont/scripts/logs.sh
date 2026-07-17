@@ -10,6 +10,21 @@ RUNTIME=""
 if [[ "${1:-}" == "--runtime" ]]; then
   RUNTIME="${2:-}"
 fi
+
+# Find the runtime actually running the stack: following via the wrong one
+# shows nothing. Anchor on semiont-backend by NAME — matching any "semiont-"
+# would false-positive on unrelated containers (e.g. a local verdaccio).
+stack_runtime() {
+  local rt
+  for rt in container docker podman; do
+    command -v "$rt" > /dev/null 2>&1 || continue
+    case "$rt" in
+      container) "$rt" list 2>/dev/null | awk '{print $1}' | grep -qx semiont-backend && { echo "$rt"; return; } ;;
+      *)         "$rt" ps --format '{{.Names}}' 2>/dev/null | grep -qx semiont-backend && { echo "$rt"; return; } ;;
+    esac
+  done
+}
+
 if [[ -n "$RUNTIME" ]]; then
   if ! command -v "$RUNTIME" > /dev/null 2>&1; then
     echo "--runtime $RUNTIME requested, but '$RUNTIME' is not on PATH." >&2
@@ -17,15 +32,11 @@ if [[ -n "$RUNTIME" ]]; then
   fi
   RT="$RUNTIME"
 else
-  for rt in container docker podman; do
-    if command -v "$rt" > /dev/null 2>&1; then
-      RT="$rt"
-      break
-    fi
-  done
+  RT=$(stack_runtime)
 fi
 if [[ -z "${RT:-}" ]]; then
-  echo "No container runtime found. Install Apple Container, Docker, or Podman." >&2
+  echo "No running Semiont stack found in any runtime (container/docker/podman)." >&2
+  echo "Start one with .semiont/scripts/start.sh, or pass --runtime explicitly." >&2
   exit 1
 fi
 

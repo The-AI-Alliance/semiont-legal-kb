@@ -12,21 +12,25 @@ RUNTIME=""
 if [[ "${1:-}" == "--runtime" ]]; then
   RUNTIME="${2:-}"
 fi
+
+# Which runtimes to sweep: the requested one, or EVERY installed runtime.
+# Stopping is idempotent (stop/rm of absent names are no-ops), so sweeping all
+# runtimes structurally kills the classic trap: bare `stop.sh` after
+# `start.sh --runtime docker` picking a different runtime, reporting success,
+# and leaving the real stack running.
+RUNTIMES=()
 if [[ -n "$RUNTIME" ]]; then
   if ! command -v "$RUNTIME" > /dev/null 2>&1; then
     echo "--runtime $RUNTIME requested, but '$RUNTIME' is not on PATH." >&2
     exit 1
   fi
-  RT="$RUNTIME"
+  RUNTIMES=("$RUNTIME")
 else
   for rt in container docker podman; do
-    if command -v "$rt" > /dev/null 2>&1; then
-      RT="$rt"
-      break
-    fi
+    command -v "$rt" > /dev/null 2>&1 && RUNTIMES+=("$rt")
   done
 fi
-if [[ -z "${RT:-}" ]]; then
+if [[ ${#RUNTIMES[@]} -eq 0 ]]; then
   echo "No container runtime found. Install Apple Container, Docker, or Podman." >&2
   exit 1
 fi
@@ -34,10 +38,12 @@ fi
 # stop-then-rm: under Apple Container a stopped --rm container persists (the
 # next `run --name` would fail with "already exists"), so rm makes this
 # idempotent across all three states: running, stopped, absent.
-for c in semiont-backend semiont-worker semiont-smelter semiont-weaver semiont-frontend \
-         semiont-neo4j semiont-qdrant semiont-postgres semiont-ollama semiont-jaeger; do
-  "$RT" stop "$c" > /dev/null 2>&1 || true
-  "$RT" rm "$c" > /dev/null 2>&1 || true
+for RT in "${RUNTIMES[@]}"; do
+  for c in semiont-backend semiont-worker semiont-smelter semiont-weaver semiont-frontend \
+           semiont-neo4j semiont-qdrant semiont-postgres semiont-ollama semiont-jaeger; do
+    "$RT" stop "$c" > /dev/null 2>&1 || true
+    "$RT" rm "$c" > /dev/null 2>&1 || true
+  done
 done
 
 # Per-service config copies staged by start.sh for the bind mounts.
