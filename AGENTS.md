@@ -69,7 +69,7 @@ The Investigation resource is the demonstration — a queryable artifact that sh
 
 ## Working in containers — do not install npm packages on the host
 
-This template assumes a containerized workflow. The backend stack runs in containers (`.semiont/scripts/start.sh` brings it up); the skills run in containers too. There is **no need** to install Node, the SDK, or any other tooling on the host machine.
+This template assumes a containerized workflow. The backend stack runs in containers (`semiont start` brings it up); the skills run in containers too. There is **no need** to install Node, the SDK, or any other tooling on the host machine.
 
 Each skill's `SKILL.md` shows a `container run` invocation that mounts the repo, installs `@semiont/sdk` and `tsx` *inside* a throwaway container, then runs the skill's `script.ts`. See [`skills/ingest-corpus/SKILL.md`](skills/ingest-corpus/SKILL.md) for the full networking discussion (the `HOST_ADDR` discovery probe).
 
@@ -77,10 +77,11 @@ Each skill's `SKILL.md` shows a `container run` invocation that mounts the repo,
 
 Before running any skill, the Semiont backend stack must be up. Two paths:
 
-### Local: `start.sh`
+### Local: `semiont start`
 
 ```bash
-.semiont/scripts/start.sh --email admin@example.com --password password --observe
+brew install the-ai-alliance/semiont/semiont   # once
+semiont start --email admin@example.com --password password
 ```
 
 Flags: `--email` / `--password` to seed an admin user, `--observe` to start a Jaeger sidecar, `--config anthropic` for cloud inference (requires `ANTHROPIC_API_KEY`), `--no-cache` to force a fresh image build. `--help` lists all options.

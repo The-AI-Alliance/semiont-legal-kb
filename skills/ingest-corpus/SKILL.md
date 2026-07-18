@@ -51,7 +51,7 @@ container run --rm -v "$(pwd):/work" -w /work \
 
 Add `-e SEMIONT_INTERACTIVE=1 -it` to enable the confirm prompt.
 
-**Why the `HOST_ADDR` discovery probe:** `localhost` from inside a freshly-spawned container is its own loopback, not the host's. The probe uses the same trick `start.sh` uses. Substitute `docker run` or `podman run` for `container run` if those are your runtimes.
+**Why the `HOST_ADDR` discovery probe:** `localhost` from inside a freshly-spawned container is its own loopback, not the host's. The probe uses the same trick `semiont start` uses. Substitute `docker run` or `podman run` for `container run` if those are your runtimes.
 
 For Docker Desktop / Podman on macOS, replace the probe with `SEMIONT_API_URL=http://host.docker.internal:4000`. For Linux Docker, `--network host` + `SEMIONT_API_URL=http://localhost:4000` works.
 

@@ -1,6 +1,6 @@
 # Semiont stack — backend, worker pool, smelter, weaver, and frontend
 # (http://localhost:3000), plus Neo4j, Qdrant, Ollama, and PostgreSQL.
-# Equivalent end state to .semiont/scripts/start.sh.
+# Equivalent end state to `semiont start` (the Semiont launcher).
 #
 # The four service images are pulled from GHCR (they ship config-free); the
 # selected config TOML is bind-mounted at runtime. Set SEMIONT_VERSION to choose
