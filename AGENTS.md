@@ -81,10 +81,11 @@ Before running any skill, the Semiont backend stack must be up. Two paths:
 
 ```bash
 brew install the-ai-alliance/semiont/semiont   # once
-semiont start --email admin@example.com --password password
+semiont start
+semiont useradd --email admin@example.com --password password --admin
 ```
 
-Flags: `--email` / `--password` to seed an admin user, `--observe` to start a Jaeger sidecar, `--config anthropic` for cloud inference (requires `ANTHROPIC_API_KEY`), `--no-cache` to force a fresh image build. `--help` lists all options.
+Flags: `--config anthropic` for cloud inference (requires `ANTHROPIC_API_KEY`), `--no-observe` to skip the Jaeger sidecar (on by default; traces at http://localhost:16686), `--runtime` to force a container runtime. `--config`/`--runtime` are sticky — a bare `semiont start` repeats the last explicitly-passed values. `--help` lists all options.
 
 ### Codespaces
 
