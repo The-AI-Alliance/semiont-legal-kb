@@ -2,8 +2,8 @@
 set -euo pipefail
 
 # Runs once on Codespace creation. Generates the per-codespace worker secret
-# and warms the third-party image cache. The Semiont images (backend, worker,
-# smelter) are built on first `docker compose up`.
+# and admin credentials, and warms the image cache. All images are published
+# (ghcr.io) — nothing is built here.
 
 cd "$(git rev-parse --show-toplevel)"
 
@@ -30,12 +30,9 @@ COMPOSE_BASE=(--env-file "$ENV_FILE" \
   -f .semiont/compose/backend.yml \
   -f .devcontainer/docker-compose.codespaces.yml)
 
-# Pull third-party images (neo4j, qdrant, postgres, ollama, jaeger).
+# Pull all images — the five published Semiont images plus the infra
+# (neo4j, qdrant, postgres, ollama, jaeger).
 docker compose "${COMPOSE_BASE[@]}" --profile observe pull
-
-# Build the three Semiont images now (rather than on first `up`) so the user
-# sees a ready stack on first shell.
-docker compose "${COMPOSE_BASE[@]}" build
 
 # Make .devcontainer/.env auto-sourced in interactive shells so the user can
 # run `docker compose …` without compose blowing up on missing variables.
