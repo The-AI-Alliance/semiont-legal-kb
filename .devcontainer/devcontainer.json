@@ -4,7 +4,12 @@
 
   "features": {
     "ghcr.io/devcontainers/features/docker-in-docker:2": {},
-    "ghcr.io/devcontainers/features/common-utils:2": {}
+    "ghcr.io/devcontainers/features/common-utils:2": {},
+    // Required for `gh codespace ssh` / `gh codespace cp`: the base image
+    // ships no SSH server (unlike GitHub's default Codespaces image), and
+    // without one every CLI route into the codespace fails — including the
+    // README's step for reading .devcontainer/admin.json.
+    "ghcr.io/devcontainers/features/sshd:1": {}
   },
 
   "hostRequirements": {
