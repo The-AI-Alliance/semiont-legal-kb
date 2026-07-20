@@ -71,7 +71,9 @@ Open **http://localhost:3000** and add the KB in the **Knowledge Bases** panel, 
 ```bash
 gh codespace create --repo The-AI-Alliance/semiont-legal-kb --machine premiumLinux
 gh codespace ports forward 3000:3000 4000:4000   # leave running
-gh codespace ssh -- cat .devcontainer/admin.json # in another terminal
+gh codespace ssh -- cat '/workspaces/*/.devcontainer/admin.json' # in another terminal
+#   (ssh lands in /home/vscode, not the workspace — hence the absolute,
+#    quoted path: the quotes keep your shell from expanding it locally)
 ```
 
 This forwards the codespace's own browser as well, so you open **http://localhost:3000** and sign in with those credentials. If `gh` rejects the forward with `must have admin rights to Repository`, grant the scope once: `gh auth refresh -h github.com -s codespace`.
