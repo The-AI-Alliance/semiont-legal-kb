@@ -47,24 +47,36 @@ This repo follows the same layout and startup flow as [`semiont-template-kb`](ht
 
 ### Open in Codespaces
 
-Install the [GitHub CLI (`gh`)](https://cli.github.com/) if you haven't already.
+**Prerequisites:** the [Semiont launcher](https://github.com/The-AI-Alliance/semiont/tree/main/apps/launcher) (`brew install the-ai-alliance/semiont/semiont`) and the [GitHub CLI (`gh`)](https://cli.github.com/), signed in with `gh auth login`.
 
 > **Before creating:** add `ANTHROPIC_API_KEY` as a [user secret](https://github.com/settings/codespaces) with this repo selected. Otherwise the backend comes up but inference is non-functional until you add the secret and rebuild the container.
 
-Create the codespace on a premium machine for more headroom during first-time setup:
+One command creates the codespace (or resumes the one you already have), waits for the stack to answer, forwards the KB to your machine, and prints the auto-generated admin credentials:
+
+```bash
+semiont start --runtime codespace --repo The-AI-Alliance/semiont-legal-kb
+```
+
+The browser runs **locally** and connects to any number of knowledge bases — cloud or local:
+
+```bash
+semiont start --service frontend
+```
+
+Open **http://localhost:3000** and add the KB in the **Knowledge Bases** panel, using the port and credentials the launcher printed (`semiont status` re-prints them). `semiont stop --repo The-AI-Alliance/semiont-legal-kb` halts billing and keeps your state; add `--delete` to destroy the codespace.
+
+<details>
+<summary>Without the launcher: the raw <code>gh</code> recipe</summary>
 
 ```bash
 gh codespace create --repo The-AI-Alliance/semiont-legal-kb --machine premiumLinux
+gh codespace ports forward 3000:3000 4000:4000   # leave running
+gh codespace ssh -- cat .devcontainer/admin.json # in another terminal
 ```
 
-Forward the browser and backend ports to your local machine, then fetch the auto-generated admin credentials:
+This forwards the codespace's own browser as well, so you open **http://localhost:3000** and sign in with those credentials. If `gh` rejects the forward with `must have admin rights to Repository`, grant the scope once: `gh auth refresh -h github.com -s codespace`.
 
-```bash
-gh codespace ports forward 3000:3000 4000:4000
-gh codespace ssh -- cat .devcontainer/admin.json
-```
-
-Then open **http://localhost:3000** and sign in with those credentials.
+</details>
 
 ## License
 
