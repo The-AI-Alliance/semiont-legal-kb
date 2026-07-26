@@ -23,9 +23,11 @@
 #   export SEMIONT_WORKER_SECRET=$(openssl rand -hex 32)
 #   docker compose -f .semiont/compose/backend.yml up
 #
-# Optional admin user (set both or neither):
-#   export ADMIN_EMAIL=admin@example.com
-#   export ADMIN_PASSWORD=<at-least-8-chars>
+# No account is created by bringing the stack up. Make the first admin with
+# `semiont useradd --repo <owner>/<name> --email … --admin` (it prompts for the
+# password; drop --repo for a local stack), or in-container with `docker compose
+# -f .semiont/compose/backend.yml exec backend semiont-useradd --email …
+# --generate-password --admin`. Neither accepts a password as an argument.
 #
 # Observability (Jaeger sidecar — UI on http://localhost:16686):
 #   export OTEL_EXPORTER_OTLP_ENDPOINT=http://jaeger:4318
@@ -134,8 +136,6 @@ services:
       QDRANT_HOST: qdrant
       OLLAMA_HOST: ollama
       SEMIONT_WORKER_SECRET: ${SEMIONT_WORKER_SECRET:?SEMIONT_WORKER_SECRET must be set, e.g. export SEMIONT_WORKER_SECRET=$$(openssl rand -hex 32)}
-      ADMIN_EMAIL: ${ADMIN_EMAIL:-}
-      ADMIN_PASSWORD: ${ADMIN_PASSWORD:-}
       OTEL_EXPORTER_OTLP_ENDPOINT: ${OTEL_EXPORTER_OTLP_ENDPOINT:-}
     depends_on:
       neo4j:

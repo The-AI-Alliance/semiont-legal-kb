@@ -7,34 +7,47 @@ set -euo pipefail
 cd "$(git rev-parse --show-toplevel)"
 
 ENV_FILE=".devcontainer/.env"
-ADMIN_FILE=".devcontainer/admin.json"
-if [[ ! -f "$ENV_FILE" || ! -f "$ADMIN_FILE" ]]; then
-  echo "ERROR: $ENV_FILE or $ADMIN_FILE missing — re-run .devcontainer/post-create.sh"
+if [[ ! -f "$ENV_FILE" ]]; then
+  echo "ERROR: $ENV_FILE missing — re-run .devcontainer/post-create.sh"
   exit 1
 fi
 
 set -a
 # shellcheck source=/dev/null
 . "$ENV_FILE"
-ADMIN_EMAIL=$(awk -F'"' '/"email"/{print $4}' "$ADMIN_FILE")
-ADMIN_PASSWORD=$(awk -F'"' '/"password"/{print $4}' "$ADMIN_FILE")
 set +a
 
-print_banner() {
+# This repo's owner/name, for a copy-pasteable `semiont useradd --repo`.
+# Codespaces exports GITHUB_REPOSITORY; the git remote is the fallback so the
+# script is also correct when run by hand outside a Codespace.
+REPO_SLUG="${GITHUB_REPOSITORY:-}"
+if [[ -z "$REPO_SLUG" ]]; then
+  REPO_SLUG=$(git remote get-url origin 2>/dev/null |
+    sed -E 's#(git@[^:]+:|https://[^/]+/)##; s#\.git$##')
+fi
+
+print_useradd_hint() {
   cat <<EOF
 
 ──────────────────────────────────────────────────────────────────────
-Semiont admin credentials (saved to $ADMIN_FILE)
+No user account exists yet — create the first admin
 ──────────────────────────────────────────────────────────────────────
-  email:    $ADMIN_EMAIL
-  password: $ADMIN_PASSWORD
+  From your machine (with the Semiont launcher installed) — prompts for
+  the password; no password is ever passed as an argument:
+
+    semiont useradd --repo ${REPO_SLUG:-<owner>/<repo>} \\
+      --email you@example.com --admin
+
+  Or from a terminal in this Codespace (--generate-password prints a
+  random one once; use --password-stdin to choose your own):
+
+    docker compose -f .semiont/compose/backend.yml \\
+      exec backend semiont-useradd \\
+      --email you@example.com --generate-password --admin
 ──────────────────────────────────────────────────────────────────────
 
 EOF
 }
-
-# Print credentials up front so the user sees them even if compose fails.
-print_banner
 
 if [[ -z "${ANTHROPIC_API_KEY:-}" ]]; then
   cat <<EOF
@@ -72,10 +85,10 @@ Semiont stack is up.
 
 To use it from your machine, forward both ports:
   gh codespace ports forward 3000:3000 4000:4000
-then open http://localhost:3000 and sign in with the credentials above.
+then open http://localhost:3000 and sign in as the admin you create below.
 
 EOF
-  print_banner
+  print_useradd_hint
   echo "Bring down with:  docker compose -f .semiont/compose/backend.yml --profile observe down"
 else
   echo
@@ -90,6 +103,5 @@ else
   done
   echo
   echo "Retry after fixing with:  bash .devcontainer/post-start.sh"
-  print_banner
   exit 1
 fi

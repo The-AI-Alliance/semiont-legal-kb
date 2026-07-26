@@ -7,8 +7,9 @@
     "ghcr.io/devcontainers/features/common-utils:2": {},
     // Required for `gh codespace ssh` / `gh codespace cp`: the base image
     // ships no SSH server (unlike GitHub's default Codespaces image), and
-    // without one every CLI route into the codespace fails — including the
-    // README's step for reading .devcontainer/admin.json.
+    // without one every CLI route into the codespace fails — including
+    // `semiont useradd --repo …`, which reaches the backend container over
+    // ssh to create the first admin.
     "ghcr.io/devcontainers/features/sshd:1": {}
   },
 

@@ -87,14 +87,14 @@ semiont start
 Then create the admin user you'll sign in with:
 
 ```bash
-semiont useradd --email admin@example.com --password password --admin
+semiont useradd --email admin@example.com --admin
 ```
 
 Flags: `--config anthropic` for cloud inference (requires `ANTHROPIC_API_KEY`), `--no-observe` to skip the Jaeger sidecar (on by default; traces at http://localhost:16686), `--runtime` to force a container runtime. `--config`/`--runtime` are sticky — a bare `semiont start` repeats the last explicitly-passed values. `--help` lists all options.
 
 ### Codespaces
 
-Open the repo in a Codespace — `post-create.sh` pulls the stack's images, `post-start.sh` brings it up, admin credentials are auto-generated into `.devcontainer/admin.json`. Print them: `cat .devcontainer/admin.json`. Forward the port: `gh codespace ports forward 4000:4000`.
+Open the repo in a Codespace — `post-create.sh` pulls the stack's images, `post-start.sh` brings it up. No account is created — make the first admin with `docker compose -f .semiont/compose/backend.yml exec backend semiont-useradd --email you@example.com --generate-password --admin`. Forward the port: `gh codespace ports forward 4000:4000`.
 
 ## Parameterization and interactivity
 

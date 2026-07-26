@@ -2,8 +2,9 @@
 set -euo pipefail
 
 # Runs once on Codespace creation. Generates the per-codespace worker secret
-# and admin credentials, and warms the image cache. All images are published
-# (ghcr.io) — nothing is built here.
+# and warms the image cache. All images are published (ghcr.io) — nothing is
+# built here, and no user account is created (see post-start.sh's closing
+# instructions: `semiont useradd` makes the first admin).
 
 cd "$(git rev-parse --show-toplevel)"
 
@@ -11,19 +12,6 @@ ENV_FILE=".devcontainer/.env"
 if [[ ! -f "$ENV_FILE" ]] || ! grep -q '^SEMIONT_WORKER_SECRET=' "$ENV_FILE"; then
   echo "SEMIONT_WORKER_SECRET=$(openssl rand -hex 32)" > "$ENV_FILE"
   echo "Generated SEMIONT_WORKER_SECRET → $ENV_FILE"
-fi
-
-ADMIN_FILE=".devcontainer/admin.json"
-if [[ ! -f "$ADMIN_FILE" ]]; then
-  email="admin-$(openssl rand -hex 4)@semiont.local"
-  password="$(openssl rand -hex 16)"
-  cat > "$ADMIN_FILE" <<EOF
-{
-  "email": "$email",
-  "password": "$password"
-}
-EOF
-  echo "Generated admin credentials → $ADMIN_FILE"
 fi
 
 COMPOSE_BASE=(--env-file "$ENV_FILE" \
