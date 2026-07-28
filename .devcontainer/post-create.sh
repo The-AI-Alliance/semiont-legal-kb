@@ -1,18 +1,38 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-# Runs once on Codespace creation. Generates the per-codespace worker secret
-# and warms the image cache. All images are published (ghcr.io) — nothing is
+# Runs once on Codespace creation. Generates the per-codespace secrets and
+# warms the image cache. All images are published (ghcr.io) — nothing is
 # built here, and no user account is created (see post-start.sh's closing
 # instructions: `semiont useradd` makes the first admin).
 
 cd "$(git rev-parse --show-toplevel)"
 
 ENV_FILE=".devcontainer/.env"
-if [[ ! -f "$ENV_FILE" ]] || ! grep -q '^SEMIONT_WORKER_SECRET=' "$ENV_FILE"; then
-  echo "SEMIONT_WORKER_SECRET=$(openssl rand -hex 32)" > "$ENV_FILE"
-  echo "Generated SEMIONT_WORKER_SECRET → $ENV_FILE"
-fi
+touch "$ENV_FILE"
+
+# Per-codespace secrets, generated once and KEPT.
+#
+# Each is added independently and APPENDED — an earlier version wrote with `>`,
+# which was safe with one secret and would silently erase the other now that
+# there are two.
+#
+# Never regenerate one that already exists: rotating JWT_SECRET invalidates
+# every token the KB has issued, which strands logged-in clients and leaves
+# in-flight jobs waiting on replies they can no longer authenticate.
+#
+# The local path does not come through here — `semiont start` generates and
+# injects JWT_SECRET per KB root. This is the codespace equivalent, and it was
+# missing: the backend requires the secret and crash-looped without it.
+ensure_secret() {
+  local name="$1"
+  if ! grep -q "^${name}=" "$ENV_FILE"; then
+    echo "${name}=$(openssl rand -hex 32)" >> "$ENV_FILE"
+    echo "Generated ${name} → $ENV_FILE"
+  fi
+}
+ensure_secret SEMIONT_WORKER_SECRET
+ensure_secret JWT_SECRET
 
 COMPOSE_BASE=(--env-file "$ENV_FILE" \
   -f .semiont/compose/backend.yml \

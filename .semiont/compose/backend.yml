@@ -136,6 +136,13 @@ services:
       QDRANT_HOST: qdrant
       OLLAMA_HOST: ollama
       SEMIONT_WORKER_SECRET: ${SEMIONT_WORKER_SECRET:?SEMIONT_WORKER_SECRET must be set, e.g. export SEMIONT_WORKER_SECRET=$$(openssl rand -hex 32)}
+      # Required by the backend: it refuses to boot without one (requireJwtSecret
+      # in apps/backend/src/auth/jwt.ts). Guarded like the worker secret so a
+      # missing value fails with a fix-it instead of a crash-loop.
+      # post-create.sh generates it per codespace; `semiont start` injects it on
+      # the local path. The sidecars do NOT need it — they authenticate to the
+      # backend with SEMIONT_WORKER_SECRET and verify no tokens.
+      JWT_SECRET: ${JWT_SECRET:?JWT_SECRET must be set (min 32 chars), e.g. export JWT_SECRET=$$(openssl rand -hex 32)}
       OTEL_EXPORTER_OTLP_ENDPOINT: ${OTEL_EXPORTER_OTLP_ENDPOINT:-}
     depends_on:
       neo4j:
