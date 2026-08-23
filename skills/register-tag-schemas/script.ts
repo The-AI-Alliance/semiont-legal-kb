@@ -16,7 +16,7 @@
  * Usage: tsx skills/register-tag-schemas/script.ts
  */
 
-import { SemiontSession, InMemorySessionStorage, type KnowledgeBase } from '@semiont/sdk';
+import { SemiontSession, InMemorySessionStorage, type KbTarget } from '@semiont/sdk';
 import { ALL_SCHEMAS } from '../../src/tag-schemas.js';
 
 async function main(): Promise<void> {
@@ -24,7 +24,7 @@ async function main(): Promise<void> {
   const email = process.env.SEMIONT_USER_EMAIL!;
   const password = process.env.SEMIONT_USER_PASSWORD!;
   const u = new URL(baseUrl);
-  const kb: KnowledgeBase = {
+  const kb: KbTarget = {
     id: 'legal-register-tag-schemas',
     label: 'legal register-tag-schemas',
     email,

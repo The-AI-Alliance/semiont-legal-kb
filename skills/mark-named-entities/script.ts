@@ -24,7 +24,7 @@
  * Usage: tsx skills/mark-named-entities/script.ts [<resourceId>] [--interactive]
  */
 
-import { SemiontSession, InMemorySessionStorage, type KnowledgeBase, entityType, resourceId as ridBrand, type ResourceId } from '@semiont/sdk';
+import { SemiontSession, InMemorySessionStorage, type KbTarget, entityType, resourceId as ridBrand, type ResourceId } from '@semiont/sdk';
 import { confirm, close as closeInteractive } from '../../src/interactive.js';
 import { createdCount } from '../../src/mark-result.js';
 
@@ -60,7 +60,7 @@ async function main(): Promise<void> {
   const email = process.env.SEMIONT_USER_EMAIL!;
   const password = process.env.SEMIONT_USER_PASSWORD!;
   const u = new URL(baseUrl);
-  const kb: KnowledgeBase = {
+  const kb: KbTarget = {
     id: 'legal-mark-named-entities',
     label: 'legal mark-named-entities',
     email,
@@ -74,7 +74,7 @@ async function main(): Promise<void> {
     // filter — even when an explicit resourceId is passed. mark.assist on
     // a binary PDF produces garbage entity annotations on PDF syntax tokens
     // (see PDF caveat in the docstring).
-    const all = await semiont.browse.resources({ limit: 1000 });
+    const all = (await semiont.browse.resources({ limit: 1000 }).fresh()).resources;
     const isText = (r: any) => {
       const mt = getMediaType(r);
       return mt === 'text/markdown' || mt === 'text/plain';

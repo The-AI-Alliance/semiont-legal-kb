@@ -10,7 +10,7 @@
 import {
   SemiontSession,
   InMemorySessionStorage,
-  type KnowledgeBase,
+  type KbTarget,
   entityType,
   resourceId as ridBrand,
   type AnnotationId,
@@ -64,7 +64,7 @@ async function main(): Promise<void> {
   const email = process.env.SEMIONT_USER_EMAIL!;
   const password = process.env.SEMIONT_USER_PASSWORD!;
   const u = new URL(baseUrl);
-  const kb: KnowledgeBase = {
+  const kb: KbTarget = {
     id: 'legal-extract-obligations',
     label: 'legal extract-obligations',
     email,
@@ -78,7 +78,7 @@ async function main(): Promise<void> {
     if (explicitResourceId) {
       targets = [ridBrand(explicitResourceId)];
     } else {
-      const all = await semiont.browse.resources({ limit: 1000 });
+      const all = (await semiont.browse.resources({ limit: 1000 }).fresh()).resources;
       targets = all
         .filter((r) => {
           const mt = getMediaType(r);
@@ -117,7 +117,7 @@ async function main(): Promise<void> {
     console.log('\nPass 2: synthesizing Obligation resources...');
     const obligationAnnotations: ObligationAnno[] = [];
     for (const rId of targets) {
-      const annotations = await semiont.browse.annotations(rId);
+      const annotations = await semiont.browse.annotations(rId).fresh();
       for (const ann of annotations) {
         if (ann.motivation !== 'linking') continue;
         const bodies = Array.isArray(ann.body) ? ann.body : ann.body ? [ann.body] : [];
