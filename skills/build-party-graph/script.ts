@@ -2,9 +2,9 @@
  * build-party-graph — promote Person/Organization mentions to canonical
  * Party resources, then extract inter-party relationships.
  *
- * Pass 1: cluster + match + bind / yield.fromAnnotation + bind, mirroring
+ * Pass 1: cluster + match + bind / yield.fromContext + bind, mirroring
  * the gutenberg-kb's build-character-articles pattern but using
- * yield.fromAnnotation (so Party body content is grounded in the source
+ * yield.fromContext (so Party body content is grounded in the source
  * paragraph the model gathers, not a hand-built stub).
  *
  * Pass 2: mark.assist relationship-extraction pass over the corpus.
@@ -229,10 +229,9 @@ async function main(): Promise<void> {
           }
 
           const partyType = sample.tags.includes('Organization') ? 'Organization' : 'Person';
-          const yieldEvent = await semiont.yield.fromAnnotation(sample.rId, sample.annId, {
+          const yieldEvent = await semiont.yield.fromContext(context, {
             title: sample.text,
             storageUri: `file://generated/party-${slugify(sample.text)}.md`,
-            context,
             entityTypes: ['Party', partyType],
           });
 
@@ -244,7 +243,7 @@ async function main(): Promise<void> {
             yieldEvent.data.result as { resourceId?: string } | undefined
           )?.resourceId;
           if (!newResourceId) {
-            console.warn(`  yield.fromAnnotation gave no resourceId for "${sample.text}"`);
+            console.warn(`  yield.fromContext gave no resourceId for "${sample.text}"`);
             continue;
           }
 

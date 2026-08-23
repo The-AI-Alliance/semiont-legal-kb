@@ -8,7 +8,7 @@ allowed-tools: Bash, Read, Write
 
 You are helping the user build the **Party graph** — the who's-who of a legal matter — out of the entity annotations from skill 2.
 
-This is a tier-2 skill. It composes `gather.annotation` + `match.search` + `yield.fromAnnotation` + `bind.body`, then runs a final `mark.assist` pass for relationship-extraction. Foundational for skill 6 (`resolve-descriptive-references`), which needs Party resources to bind descriptive references against.
+This is a tier-2 skill. It composes `gather.annotation` + `match.search` + `yield.fromContext` + `bind.body`, then runs a final `mark.assist` pass for relationship-extraction. Foundational for skill 6 (`resolve-descriptive-references`), which needs Party resources to bind descriptive references against.
 
 ## What it does
 
@@ -20,7 +20,7 @@ This is a tier-2 skill. It composes `gather.annotation` + `match.search` + `yiel
    - `gather.annotation` for context.
    - `match.search` for an existing Party resource.
    - If a candidate scores ≥ `MATCH_THRESHOLD`: `bind.body` the annotation to the existing resource.
-   - Otherwise: `yield.fromAnnotation` to synthesize a new Party resource (entity types `[Party, Person]` or `[Party, Organization]`), then `bind.body`.
+   - Otherwise: `yield.fromContext` to synthesize a new Party resource (entity types `[Party, Person]` or `[Party, Organization]`), then `bind.body`.
 
 **Pass 2 — extract inter-party relationships.**
 
@@ -28,7 +28,7 @@ Runs `mark.assist({ motivation: 'linking', instructions: ... })` over each markd
 
 ## SDK verbs
 
-- Pass 1: `browse.resources`, `browse.annotations`, `gather.annotation`, `match.search`, `yield.fromAnnotation`, `bind.body`
+- Pass 1: `browse.resources`, `browse.annotations`, `gather.annotation`, `match.search`, `yield.fromContext`, `bind.body`
 - Pass 2: `mark.assist({ motivation: 'linking', instructions: ... })`
 
 ## Parameters
