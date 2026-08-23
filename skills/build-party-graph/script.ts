@@ -24,6 +24,7 @@ import {
 } from '@semiont/sdk';
 import { confirm, isInteractive, close as closeInteractive } from '../../src/interactive.js';
 import { createdCount } from '../../src/mark-result.js';
+import { getMediaType } from '../../src/media-type.js';
 
 const MATCH_THRESHOLD = Number(process.env.MATCH_THRESHOLD ?? 30);
 const SKIP_RELATIONSHIP_PASS = process.env.SKIP_RELATIONSHIP_PASS === '1';
@@ -60,14 +61,6 @@ Only tag relationships supported by explicit language in the document. Do not in
 that aren't on the page.
 `.trim();
 
-function getMediaType(r: any): string | undefined {
-  const reps = Array.isArray(r.representations)
-    ? r.representations
-    : r.representations
-      ? [r.representations]
-      : [];
-  return reps[0]?.mediaType;
-}
 
 function slugify(text: string): string {
   return text.toLowerCase().replace(/\s+/g, '-').replace(/[^a-z0-9-]/g, '');
@@ -117,12 +110,15 @@ async function main(): Promise<void> {
         if (ann.motivation !== 'linking') continue;
         const bodies = Array.isArray(ann.body) ? ann.body : ann.body ? [ann.body] : [];
         const tags = bodies
-          .filter((b: any) => b.type === 'TextualBody' && b.purpose === 'tagging')
-          .flatMap((b: any) => (Array.isArray(b.value) ? b.value : [b.value]));
+          .flatMap((b) =>
+            b.type === 'TextualBody' && b.purpose === 'tagging'
+              ? (Array.isArray(b.value) ? b.value : [b.value])
+              : [],
+          );
         const partyTags = tags.filter((t: string) => PARTY_ENTITY_TYPES.has(t));
         if (partyTags.length === 0) continue;
         const alreadyBound = bodies.some(
-          (b: any) => b.type === 'SpecificResource' && b.purpose === 'linking',
+          (b) => b.type === 'SpecificResource' && b.purpose === 'linking',
         );
         const target = ann.target;
         const selectors =

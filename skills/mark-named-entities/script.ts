@@ -24,9 +24,10 @@
  * Usage: tsx skills/mark-named-entities/script.ts [<resourceId>] [--interactive]
  */
 
-import { SemiontSession, InMemorySessionStorage, type KbTarget, entityType, resourceId as ridBrand, type ResourceId } from '@semiont/sdk';
+import { SemiontSession, InMemorySessionStorage, type KbTarget, entityType, resourceId as ridBrand, type ResourceId, type ResourceDescriptor} from '@semiont/sdk';
 import { confirm, close as closeInteractive } from '../../src/interactive.js';
 import { createdCount } from '../../src/mark-result.js';
+import { getMediaType } from '../../src/media-type.js';
 
 const ENTITY_TYPES = (
   process.env.ENTITY_TYPES ??
@@ -43,14 +44,6 @@ const ENTITY_TYPES = (
 const INCLUDE_DESCRIPTIVE_REFERENCES =
   (process.env.INCLUDE_DESCRIPTIVE_REFERENCES ?? '1') !== '0';
 
-function getMediaType(r: any): string | undefined {
-  const reps = Array.isArray(r.representations)
-    ? r.representations
-    : r.representations
-      ? [r.representations]
-      : [];
-  return reps[0]?.mediaType;
-}
 
 async function main(): Promise<void> {
   const args = process.argv.slice(2).filter((a) => !a.startsWith('-'));
@@ -75,7 +68,7 @@ async function main(): Promise<void> {
     // a binary PDF produces garbage entity annotations on PDF syntax tokens
     // (see PDF caveat in the docstring).
     const all = (await semiont.browse.resources({ limit: 1000 }).fresh()).resources;
-    const isText = (r: any) => {
+    const isText = (r: ResourceDescriptor) => {
       const mt = getMediaType(r);
       return mt === 'text/markdown' || mt === 'text/plain';
     };
