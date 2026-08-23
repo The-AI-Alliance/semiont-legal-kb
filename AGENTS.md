@@ -21,7 +21,7 @@ If you're an AI assistant working in this repo, this file is your orientation. T
 | [`mark-named-entities`](skills/mark-named-entities/) | Detect Person, Organization, Address, Date, MonetaryValue, LegalSection, LegalDocument, LegalTerm spans — both formal mentions and descriptive references ("the landlord", "the vendor") | `mark.assist` (linking, optionally with `includeDescriptiveReferences`) |
 | [`assess-contract-risks`](skills/assess-contract-risks/) | Flag risk-prone clauses (asymmetric provisions, vague language, missing definitions) | `mark.assist` (assessing) |
 | [`comment-action-items`](skills/comment-action-items/) | Surface action items, deadlines, required follow-ups | `mark.assist` (commenting) |
-| [`build-party-graph`](skills/build-party-graph/) | Promote Person/Organization mentions to Party resources, encode inter-party relationships | `+ yield.fromAnnotation`, `bind.body`, `match.search` |
+| [`build-party-graph`](skills/build-party-graph/) | Promote Person/Organization mentions to Party resources, encode inter-party relationships | `+ yield.fromContext`, `bind.body`, `match.search` |
 | [`resolve-descriptive-references`](skills/resolve-descriptive-references/) | Walk descriptive references, resolve where evidence exists, synthesize an Investigation resource | `+ gather.annotation` |
 | [`build-section-graph`](skills/build-section-graph/) | Decompose contracts into per-section LegalSection resources, bind cross-document references | `+ yield.resource` per section |
 | [`extract-obligations`](skills/extract-obligations/) | Tag every duty / covenant / restriction; synthesize an Obligation resource per | full pipeline composition |
