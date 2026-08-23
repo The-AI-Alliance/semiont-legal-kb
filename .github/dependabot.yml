@@ -15,3 +15,9 @@ updates:
     groups:
       npm:
         patterns: ["*"]
+    ignore:
+      # TypeScript 7 is deliberately deferred fleet-wide (owner decision,
+      # 2026-08-23). Without this, dependabot re-proposes the major bump every
+      # week and the decision has to be re-made by hand each time.
+      - dependency-name: "typescript"
+        versions: ["7.x"]
