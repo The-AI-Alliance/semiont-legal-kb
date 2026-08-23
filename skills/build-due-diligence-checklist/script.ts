@@ -19,6 +19,7 @@ import {
   type ResourceId,
 } from '@semiont/sdk';
 import { confirm, close as closeInteractive } from '../../src/interactive.js';
+import { getMediaType } from '../../src/media-type.js';
 
 const CHECKLIST_NAME = process.env.CHECKLIST_NAME ?? 'Due-diligence checklist';
 const INCLUDE_GATHER = process.env.INCLUDE_GATHER !== '0';
@@ -35,14 +36,6 @@ interface Item {
   excerpt?: string;
 }
 
-function getMediaType(r: any): string | undefined {
-  const reps = Array.isArray(r.representations)
-    ? r.representations
-    : r.representations
-      ? [r.representations]
-      : [];
-  return reps[0]?.mediaType;
-}
 
 async function main(): Promise<void> {
   const baseUrl = process.env.SEMIONT_API_URL ?? 'http://localhost:4000';
@@ -78,9 +71,14 @@ async function main(): Promise<void> {
       for (const ann of annotations) {
         if (ann.motivation !== 'commenting') continue;
         const bodies = Array.isArray(ann.body) ? ann.body : ann.body ? [ann.body] : [];
+        // One flatMap so the guard narrows `b` to TextualBody and `.value` is
+        // typed; `.filter()` alone cannot narrow an array's element type.
         const commentText = bodies
-          .filter((b: any) => b.type === 'TextualBody' && b.purpose === 'commenting')
-          .map((b: any) => (Array.isArray(b.value) ? b.value.join(' ') : b.value))
+          .flatMap((b) =>
+            b.type === 'TextualBody' && b.purpose === 'commenting'
+              ? [Array.isArray(b.value) ? b.value.join(' ') : b.value]
+              : [],
+          )
           .join(' ');
         if (!commentText.trim()) continue;
         const target = ann.target;
