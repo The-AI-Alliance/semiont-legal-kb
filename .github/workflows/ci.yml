@@ -1,0 +1,19 @@
+# Every KB repo carries only this stub; the jobs live in the reusable workflow
+# it calls, so changing what CI does is one edit there, not a fleet sync.
+#
+# Pinned to @main deliberately: the fleet tracks the template's current CI. A
+# tag or SHA would freeze each fork at whatever was current the day it synced —
+# which is the drift this whole arrangement exists to avoid.
+name: ci
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  ci:
+    uses: The-AI-Alliance/semiont-template-kb/.github/workflows/kb-ci.yml@main
