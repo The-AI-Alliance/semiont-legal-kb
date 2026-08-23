@@ -9,7 +9,7 @@
 import { readFileSync, statSync } from 'node:fs';
 import { basename, extname, join } from 'node:path';
 
-import { SemiontSession, InMemorySessionStorage, type KnowledgeBase, resourceId as ridBrand } from '@semiont/sdk';
+import { SemiontSession, InMemorySessionStorage, type KbTarget, resourceId as ridBrand } from '@semiont/sdk';
 import { diffContracts } from '../../src/diff.js';
 import { confirm, close as closeInteractive } from '../../src/interactive.js';
 
@@ -54,7 +54,7 @@ async function main(): Promise<void> {
   const email = process.env.SEMIONT_USER_EMAIL!;
   const password = process.env.SEMIONT_USER_PASSWORD!;
   const u = new URL(baseUrl);
-  const kb: KnowledgeBase = {
+  const kb: KbTarget = {
     id: 'legal-redline-tracker',
     label: 'legal redline-tracker',
     email,

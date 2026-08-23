@@ -9,7 +9,7 @@
  * Usage: tsx skills/comment-action-items/script.ts [<resourceId>] [--interactive]
  */
 
-import { SemiontSession, InMemorySessionStorage, type KnowledgeBase, resourceId as ridBrand, type ResourceId } from '@semiont/sdk';
+import { SemiontSession, InMemorySessionStorage, type KbTarget, resourceId as ridBrand, type ResourceId } from '@semiont/sdk';
 import { confirm, close as closeInteractive } from '../../src/interactive.js';
 import { createdCount } from '../../src/mark-result.js';
 
@@ -43,7 +43,7 @@ async function main(): Promise<void> {
   const email = process.env.SEMIONT_USER_EMAIL!;
   const password = process.env.SEMIONT_USER_PASSWORD!;
   const u = new URL(baseUrl);
-  const kb: KnowledgeBase = {
+  const kb: KbTarget = {
     id: 'legal-comment-action-items',
     label: 'legal comment-action-items',
     email,
@@ -57,7 +57,7 @@ async function main(): Promise<void> {
     if (explicitResourceId) {
       targets = [ridBrand(explicitResourceId)];
     } else {
-      const all = await semiont.browse.resources({ limit: 1000 });
+      const all = (await semiont.browse.resources({ limit: 1000 }).fresh()).resources;
       targets = all
         .filter((r) => {
           const mt = getMediaType(r);
