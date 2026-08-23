@@ -129,8 +129,13 @@ async function main(): Promise<void> {
           });
           if (!('response' in gather)) continue;
           const ctx = gather.response as GatheredContext;
-          const ctxText = (ctx as any).contextText ?? (ctx as any).text ?? '';
-          if (typeof ctxText === 'string' && ctxText) {
+          // Text lives on the focus, not the context root — `contextText`/`text`
+          // do not exist there, so this excerpt was never populated.
+          const selected = ctx.focus.kind === 'annotation' ? ctx.focus.selected : undefined;
+          const ctxText = selected
+            ? `${selected.before ?? ''}${selected.text}${selected.after ?? ''}`
+            : '';
+          if (ctxText) {
             item.excerpt = ctxText.slice(0, 400).trim();
           }
         } catch (e) {

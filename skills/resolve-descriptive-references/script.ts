@@ -21,6 +21,7 @@ import {
   type ResourceId,
 } from '@semiont/sdk';
 import { confirm, isInteractive, close as closeInteractive } from '../../src/interactive.js';
+import { getMediaType } from '../../src/media-type.js';
 
 const MATCH_THRESHOLD = Number(process.env.MATCH_THRESHOLD ?? 30);
 const INVESTIGATION_NAME = process.env.INVESTIGATION_NAME ?? 'Descriptive-reference investigation';
@@ -77,14 +78,6 @@ interface ResolutionRecord {
   topCandidates: Array<{ name: string; score: number }>;
 }
 
-function getMediaType(r: any): string | undefined {
-  const reps = Array.isArray(r.representations)
-    ? r.representations
-    : r.representations
-      ? [r.representations]
-      : [];
-  return reps[0]?.mediaType;
-}
 
 async function main(): Promise<void> {
   const baseUrl = process.env.SEMIONT_API_URL ?? 'http://localhost:4000';
@@ -133,12 +126,15 @@ async function main(): Promise<void> {
         if (ann.motivation !== 'linking') continue;
         const bodies = Array.isArray(ann.body) ? ann.body : ann.body ? [ann.body] : [];
         const alreadyBound = bodies.some(
-          (b: any) => b.type === 'SpecificResource' && b.purpose === 'linking',
+          (b) => b.type === 'SpecificResource' && b.purpose === 'linking',
         );
         if (alreadyBound) continue;
         const tags = bodies
-          .filter((b: any) => b.type === 'TextualBody' && b.purpose === 'tagging')
-          .flatMap((b: any) => (Array.isArray(b.value) ? b.value : [b.value]));
+          .flatMap((b) =>
+            b.type === 'TextualBody' && b.purpose === 'tagging'
+              ? (Array.isArray(b.value) ? b.value : [b.value])
+              : [],
+          );
         const isNamedEntity = tags.some((t: string) => NAMED_ENTITY_TAGS.has(t));
         if (isNamedEntity) continue;
         // Defensive: never treat citation-tagged annotations as descriptive refs.
@@ -195,7 +191,7 @@ async function main(): Promise<void> {
         limit: 5,
         useSemanticScoring: true,
       });
-      const candidates = matchResult.response.map((c: any) => ({
+      const candidates = matchResult.response.map((c) => ({
         name: c.name as string,
         score: (c.score ?? 0) as number,
         id: c['@id'] as string,
