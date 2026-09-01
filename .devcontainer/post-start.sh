@@ -93,6 +93,13 @@ toml_value() {
     }' "$3"
 }
 
+# The environment these sections live under — `[defaults] environment` in the
+# selected config, which is what the containers load.
+KB_ENV_RAW=$(toml_value defaults environment "$SOURCE_CONFIG")
+KB_ENV=${KB_ENV_RAW%\"}
+KB_ENV=${KB_ENV#\"}
+if [[ -z "$KB_ENV" ]]; then KB_ENV="local"; fi
+
 KB_NAME=$(toml_value project name .semiont/config)
 KB_DOMAIN=$(toml_value site domain .semiont/config)
 KB_OAUTH=$(toml_value site oauthAllowedDomains .semiont/config)
@@ -110,6 +117,21 @@ KB_OAUTH=$(toml_value site oauthAllowedDomains .semiont/config)
   if [[ -n "$KB_NAME" ]];   then echo "name = $KB_NAME"; fi
   if [[ -n "$KB_DOMAIN" ]]; then echo "domain = $KB_DOMAIN"; fi
   if [[ -n "$KB_OAUTH" ]];  then echo "oauthAllowedDomains = $KB_OAUTH"; fi
+
+  # Where THIS stack's archivist listens. gateway, worker, smelter and the
+  # librarian all dial it for the record, and the config loader refuses to
+  # start without it ("services.archivist.host is not configured"). `semiont
+  # start` appends the same section per staged copy; under compose the service
+  # name IS the hostname, so one literal serves every consumer.
+  #
+  # A hand-written section wins: an operator describing a topology this script
+  # cannot see (a remote archivist, a split deployment) outranks the default.
+  if ! grep -q "^\[environments\.${KB_ENV}\.archivist\]" "$SOURCE_CONFIG"; then
+    echo ""
+    echo "[environments.${KB_ENV}.archivist]"
+    echo "host = \"archivist\""
+    echo "port = 9093"
+  fi
 } > "$STAGED_CONFIG"
 
 echo "Staged $SOURCE_CONFIG + [kb] identity → $STAGED_CONFIG"
