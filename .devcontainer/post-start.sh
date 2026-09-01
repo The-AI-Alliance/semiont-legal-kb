@@ -110,13 +110,18 @@ KB_OAUTH=$(toml_value site oauthAllowedDomains .semiont/config)
   echo "# Staged by post-start.sh — this KB's committed identity, copied from"
   echo "# .semiont/config. Regenerated on every start: edit .semiont/config,"
   echo "# never this file."
-  echo "[kb]"
-  # Declared-or-omitted, matching the launcher: a KB that declares no domain
-  # or no sign-in policy still meets the gateway's refusal rather than
-  # inheriting a fabricated one.
-  if [[ -n "$KB_NAME" ]];   then echo "name = $KB_NAME"; fi
-  if [[ -n "$KB_DOMAIN" ]]; then echo "domain = $KB_DOMAIN"; fi
-  if [[ -n "$KB_OAUTH" ]];  then echo "oauthAllowedDomains = $KB_OAUTH"; fi
+  # Operator-wins, same as the launcher: a config that already declares [kb]
+  # keeps it. Appending a second one would be a duplicate TOML table — a parse
+  # error, not an override.
+  if ! grep -q "^\[kb\]" "$SOURCE_CONFIG"; then
+    echo "[kb]"
+    # Declared-or-omitted, matching the launcher: a KB that declares no domain
+    # or no sign-in policy still meets the gateway's refusal rather than
+    # inheriting a fabricated one.
+    if [[ -n "$KB_NAME" ]];   then echo "name = $KB_NAME"; fi
+    if [[ -n "$KB_DOMAIN" ]]; then echo "domain = $KB_DOMAIN"; fi
+    if [[ -n "$KB_OAUTH" ]];  then echo "oauthAllowedDomains = $KB_OAUTH"; fi
+  fi
 
   # Where THIS stack's archivist listens. gateway, worker, smelter and the
   # librarian all dial it for the record, and the config loader refuses to
