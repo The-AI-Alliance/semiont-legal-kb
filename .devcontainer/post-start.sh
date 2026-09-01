@@ -118,11 +118,31 @@ echo "Staged $SOURCE_CONFIG + [kb] identity → $STAGED_CONFIG"
 # directory (.semiont/compose), which is how compose resolves these paths.
 export SEMIONT_CONFIG="../../${STAGED_CONFIG}"
 
-echo "Bringing up the stack (compose up -d --wait, timeout 5 min)..."
-
 COMPOSE_FILES=(--env-file "$ENV_FILE" \
   -f .semiont/compose/backend.yml \
   -f .devcontainer/docker-compose.codespaces.yml)
+
+# ── Make the shared state volume writable by the container user ─────────────
+#
+# gateway, archivist and librarian share one state volume: the job queue is
+# filesystem-backed, so all three must read and write the same directory.
+#
+# The images run as `semiont` (uid 1001) and pre-create `/kb`, but not
+# `/semiont-state`. Docker seeds a fresh named volume from the image at that
+# path — and when the image has nothing there, the volume is created
+# root-owned, so uid 1001 cannot mkdir inside it and the gateway dies with
+# EACCES before it can serve anything. `semiont start` never hits this: it
+# bind-mounts a host directory it created itself.
+#
+# One root-run chown fixes the volume for good; it is idempotent, and cheap
+# once the volume already has the right owner. --no-deps keeps it from
+# starting the stack, and `run` publishes no ports.
+echo "Ensuring the shared state volume is writable by uid 1001..."
+docker compose "${COMPOSE_FILES[@]}" run --rm --no-deps --user root \
+  --entrypoint sh gateway -c \
+  'mkdir -p /semiont-state && chown -R 1001:1001 /semiont-state' >/dev/null
+
+echo "Bringing up the stack (compose up -d --wait, timeout 5 min)..."
 
 COMPOSE_OK=true
 if ! docker compose "${COMPOSE_FILES[@]}" --profile observe up -d --wait --wait-timeout 300; then
