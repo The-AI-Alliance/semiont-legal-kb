@@ -2,4 +2,4 @@
 .devcontainer/.env
 .cache/
 node_modules
-
+.devcontainer/.staged-config.toml
