@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-# Runs on every Codespace start (creation and resume). Brings up the backend
-# stack via backend.yml + the Codespace overrides + the observe profile.
+# Runs on every Codespace start (creation and resume). Brings up the stack
+# via backend.yml + the Codespace overrides + the observe profile.
 
 cd "$(git rev-parse --show-toplevel)"
 
@@ -42,7 +42,7 @@ No user account exists yet — create the first admin
   random one once; use --password-stdin to choose your own):
 
     docker compose -f .semiont/compose/backend.yml \\
-      exec backend semiont-useradd \\
+      exec gateway semiont-useradd \\
       --email you@example.com --generate-password --admin
 ──────────────────────────────────────────────────────────────────────
 
@@ -59,7 +59,7 @@ WARNING: ANTHROPIC_API_KEY is not set.
 EOF
 fi
 
-echo "Bringing up backend stack (compose up -d --wait, timeout 5 min)..."
+echo "Bringing up the stack (compose up -d --wait, timeout 5 min)..."
 
 COMPOSE_FILES=(--env-file "$ENV_FILE" \
   -f .semiont/compose/backend.yml \
@@ -79,7 +79,7 @@ if $COMPOSE_OK; then
 
 Semiont stack is up.
   Semiont Browser → port 3000  (forwarded by Codespaces)
-  Backend API     → port 4000  (forwarded by Codespaces)
+  Gateway API     → port 4000  (forwarded by Codespaces)
   Jaeger UI       → port 16686
   Neo4j Browser   → port 7474   (login: neo4j / localpass)
 
@@ -96,7 +96,7 @@ else
   echo
   echo "── service state ─────────────────────────────────────────────────"
   docker compose "${COMPOSE_FILES[@]}" ps || true
-  for svc in backend worker smelter weaver frontend; do
+  for svc in gateway worker smelter weaver browser; do
     echo
     echo "── $svc (last 100 log lines) ────────────────────────────────────"
     docker compose "${COMPOSE_FILES[@]}" logs --tail=100 "$svc" 2>&1 || true

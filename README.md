@@ -49,7 +49,7 @@ This repo follows the same layout and startup flow as [`semiont-template-kb`](ht
 
 **Prerequisites:** the [Semiont launcher](https://github.com/The-AI-Alliance/semiont/tree/main/apps/launcher) (`brew install the-ai-alliance/semiont/semiont`) and the [GitHub CLI (`gh`)](https://cli.github.com/), signed in with `gh auth login`.
 
-> **Before creating:** add `ANTHROPIC_API_KEY` as a [user secret](https://github.com/settings/codespaces) with this repo selected. Otherwise the backend comes up but inference is non-functional until you add the secret and rebuild the container.
+> **Before creating:** add `ANTHROPIC_API_KEY` as a [user secret](https://github.com/settings/codespaces) with this repo selected. Otherwise the stack comes up but inference is non-functional until you add the secret and rebuild the container.
 
 One command creates the codespace (or resumes the one you already have), waits for the stack to answer, and forwards the KB to your machine:
 
@@ -66,7 +66,7 @@ semiont useradd --repo The-AI-Alliance/semiont-legal-kb --email you@example.com 
 The browser runs **locally** and connects to any number of knowledge bases — cloud or local:
 
 ```bash
-semiont start --service frontend
+semiont start --service browser
 ```
 
 Open **http://localhost:3000** and add the KB in the **Knowledge Bases** panel, using the port the launcher printed and the credentials you just created. `semiont stop --repo The-AI-Alliance/semiont-legal-kb` halts billing and keeps your state; add `--delete` to destroy the codespace.
@@ -81,7 +81,7 @@ gh codespace ports forward 3000:3000 4000:4000   # leave running
 # In another terminal, create the first admin (nothing creates one for you).
 # --generate-password prints a random password once; there is no --password flag:
 gh codespace ssh -- 'cd /workspaces/* && docker compose -f .semiont/compose/backend.yml \
-  exec -T backend semiont-useradd --email you@example.com --generate-password --admin'
+  exec -T gateway semiont-useradd --email you@example.com --generate-password --admin'
 ```
 
 This forwards the codespace's own browser as well, so you open **http://localhost:3000** and sign in as the admin you just created. If `gh` rejects the forward with `must have admin rights to Repository`, grant the scope once: `gh auth refresh -h github.com -s codespace`.

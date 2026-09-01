@@ -38,7 +38,7 @@ const NAMED_ENTITY_TAGS = new Set([
 ]);
 
 // Scope to legal-kb resources only. Without this, the script also walks
-// caselaw resources sharing the same backend and treats their unbound
+// caselaw resources sharing the same stack and treats their unbound
 // `Citation`-tagged annotations as descriptive references — wasted LLM
 // compute and pollutes the resulting Investigation resource.
 const LEGAL_RESOURCE_ENTITY_TYPES = new Set([
