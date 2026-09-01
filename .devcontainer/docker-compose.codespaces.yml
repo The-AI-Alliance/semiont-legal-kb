@@ -1,6 +1,11 @@
-# Codespace overrides for backend.yml — sized for the 4-core/16GB machine type
-# declared in devcontainer.json. The anthropic config doesn't load a local
+# Codespace overrides for backend.yml. The anthropic config doesn't load a local
 # inference model, so Ollama only needs room for nomic-embed-text (~270MB).
+#
+# NOTE ON THE MACHINE SIZE: devcontainer.json declares 4 cores / 16GB, but the
+# launcher creates codespaces with `--machine premiumLinux` (8 cores / 32GB),
+# and an explicit --machine overrides hostRequirements. The limits below were
+# chosen against 16GB and are therefore conservative, not tight — measure on a
+# real codespace before treating any of them as a ceiling worth raising.
 #
 # Used via:
 #   docker compose -f .semiont/compose/backend.yml \
@@ -11,14 +16,14 @@
 # Some entries repeat the base value (gateway, archivist, worker, browser) and
 # that repetition is deliberate: the codespace is the memory-constrained target,
 # so its numbers are pinned here rather than inherited. Raising a limit in
-# backend.yml must not silently raise it on a 16GB machine — change it here too,
-# on purpose. Keep every service listed, including ones that happen to match.
+# backend.yml must not silently raise it on a codespace — change it here too, on
+# purpose. Keep every service listed, including ones that happen to match.
 #
 # Declared totals: ollama 4 + gateway 2 + archivist 2 + librarian 1 + worker 2
-# + smelter 1 + weaver 1 + browser 1 = 14g, against a 16GB machine that also
-# runs neo4j, qdrant, postgres and (under `observe`) jaeger uncapped. That is
-# tight, and it got tighter when 0.5.29 split two services out of the gateway.
-# The archivist is the one to keep roomy: it holds the KB bytes and the views.
+# + smelter 1 + weaver 1 + browser 1 = 14g, plus neo4j, qdrant, postgres and
+# (under `observe`) jaeger uncapped. On the 32GB machine the launcher actually
+# requests that leaves real headroom. The archivist is the one to keep roomy
+# either way: it holds the KB bytes and the views.
 
 services:
   ollama:
