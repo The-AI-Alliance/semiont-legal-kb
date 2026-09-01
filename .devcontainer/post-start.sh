@@ -72,6 +72,15 @@ fi
 # NOT duplicated into the semiontconfigs, which would be one fact in two files
 # with nothing keeping them equal.
 STAGED_CONFIG=".devcontainer/.staged-config.toml"
+# Checksum before regenerating: compose recreates a container when its
+# config DECLARATION changes, and the bind-mount path never does — only
+# these bytes. Without an explicit recreate, a corrected config is written
+# and then ignored by the containers already mounting it, which reads
+# exactly like the fix not working.
+STAGED_PREV_SUM=""
+if [[ -f "$STAGED_CONFIG" ]]; then
+  STAGED_PREV_SUM=$(sha256sum "$STAGED_CONFIG" | cut -d" " -f1)
+fi
 SOURCE_CONFIG_REL="${SEMIONT_CONFIG:-../semiontconfig/ollama-gemma.toml}"
 SOURCE_CONFIG=".semiont/compose/${SOURCE_CONFIG_REL}"
 
@@ -110,13 +119,18 @@ KB_OAUTH=$(toml_value site oauthAllowedDomains .semiont/config)
   echo "# Staged by post-start.sh — this KB's committed identity, copied from"
   echo "# .semiont/config. Regenerated on every start: edit .semiont/config,"
   echo "# never this file."
-  echo "[kb]"
-  # Declared-or-omitted, matching the launcher: a KB that declares no domain
-  # or no sign-in policy still meets the gateway's refusal rather than
-  # inheriting a fabricated one.
-  if [[ -n "$KB_NAME" ]];   then echo "name = $KB_NAME"; fi
-  if [[ -n "$KB_DOMAIN" ]]; then echo "domain = $KB_DOMAIN"; fi
-  if [[ -n "$KB_OAUTH" ]];  then echo "oauthAllowedDomains = $KB_OAUTH"; fi
+  # Operator-wins, same as the launcher: a config that already declares [kb]
+  # keeps it. Appending a second one would be a duplicate TOML table — a parse
+  # error, not an override.
+  if ! grep -q "^\[kb\]" "$SOURCE_CONFIG"; then
+    echo "[kb]"
+    # Declared-or-omitted, matching the launcher: a KB that declares no domain
+    # or no sign-in policy still meets the gateway's refusal rather than
+    # inheriting a fabricated one.
+    if [[ -n "$KB_NAME" ]];   then echo "name = $KB_NAME"; fi
+    if [[ -n "$KB_DOMAIN" ]]; then echo "domain = $KB_DOMAIN"; fi
+    if [[ -n "$KB_OAUTH" ]];  then echo "oauthAllowedDomains = $KB_OAUTH"; fi
+  fi
 
   # Where THIS stack's archivist listens. gateway, worker, smelter and the
   # librarian all dial it for the record, and the config loader refuses to
@@ -163,6 +177,15 @@ echo "Ensuring the shared state volume is writable by uid 1001..."
 docker compose "${COMPOSE_FILES[@]}" run --rm --no-deps --user root \
   --entrypoint sh gateway -c \
   'mkdir -p /semiont-state && chown -R 1001:1001 /semiont-state' >/dev/null
+
+# Services that mount the staged config. The browser has no config mount, and
+# the infra services are not ours to churn, so neither is listed.
+STAGED_CONSUMERS=(gateway archivist librarian worker smelter weaver)
+
+if [[ -n "$STAGED_PREV_SUM" ]] && [[ "$STAGED_PREV_SUM" != "$(sha256sum "$STAGED_CONFIG" | cut -d" " -f1)" ]]; then
+  echo "Staged config changed — recreating the services that mount it..."
+  docker compose "${COMPOSE_FILES[@]}" up -d --no-deps --force-recreate "${STAGED_CONSUMERS[@]}"
+fi
 
 echo "Bringing up the stack (compose up -d --wait, timeout 5 min)..."
 
