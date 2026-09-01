@@ -8,7 +8,7 @@
     // Required for `gh codespace ssh` / `gh codespace cp`: the base image
     // ships no SSH server (unlike GitHub's default Codespaces image), and
     // without one every CLI route into the codespace fails — including
-    // `semiont useradd --repo …`, which reaches the backend container over
+    // `semiont useradd --repo …`, which reaches the gateway container over
     // ssh to create the first admin.
     "ghcr.io/devcontainers/features/sshd:1": {}
   },
@@ -32,7 +32,7 @@
   "forwardPorts": [3000, 4000, 16686, 7474, 9090, 9091, 9092],
   "portsAttributes": {
     "3000": { "label": "Semiont Browser", "onAutoForward": "notify" },
-    "4000": { "label": "Backend API", "onAutoForward": "notify" },
+    "4000": { "label": "Gateway API", "onAutoForward": "notify" },
     "16686": { "label": "Jaeger UI", "onAutoForward": "notify" },
     "7474": { "label": "Neo4j Browser", "onAutoForward": "silent" },
     "9090": { "label": "Worker health", "onAutoForward": "silent" },

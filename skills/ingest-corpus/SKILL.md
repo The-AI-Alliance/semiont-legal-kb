@@ -36,7 +36,7 @@ Before bulk upload: `confirm` after showing the per-class summary.
 
 ## Run it
 
-**Prerequisite: the Semiont backend is running** — see [AGENTS.md › Backend setup](../../AGENTS.md#backend-setup).
+**Prerequisite: the Semiont stack is running** — see [AGENTS.md › Stack setup](../../AGENTS.md#stack-setup).
 
 ```bash
 HOST_ADDR=$(container run --rm node:24-alpine sh -c "ip route | awk '/default/{print \$3}'" 2>/dev/null | tr -d '[:space:]')
@@ -61,6 +61,6 @@ Per-file resource id and entity types. Note these — downstream skills (`mark-n
 
 ## Guidance for the AI assistant
 
-- **Re-running creates duplicates.** No deduplication. Use `semiont.browse.resources({ search: '<title>' })` to check before re-running, or restart the backend stack to start fresh.
+- **Re-running creates duplicates.** No deduplication. Use `semiont.browse.resources({ search: '<title>' })` to check before re-running, or restart the stack to start fresh.
 - **PDFs are cataloged but not analyzed.** `mark.assist` requires `text/markdown` or `text/plain`. Tier-1 mark skills filter on media type and skip PDFs automatically. The markdown subset of the corpus carries the analytical workload.
 - **Pre-curated context articles survive.** Drop a markdown file into `context/`, `curated/`, or `generated/` and skill 1 ingests it as a `LegalContext` resource on day 1; downstream synthesis skills `match.search` against existing `LegalContext` resources before creating new ones.

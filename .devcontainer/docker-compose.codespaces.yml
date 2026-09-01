@@ -10,7 +10,7 @@
 services:
   ollama:
     mem_limit: 4g
-  backend:
+  gateway:
     mem_limit: 2g
   worker:
     mem_limit: 2g
@@ -18,5 +18,5 @@ services:
     mem_limit: 1g
   weaver:
     mem_limit: 1g
-  frontend:
+  browser:
     mem_limit: 1g

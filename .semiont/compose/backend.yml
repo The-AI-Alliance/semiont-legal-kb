@@ -1,4 +1,4 @@
-# Semiont stack — backend, worker pool, smelter, weaver, and frontend
+# Semiont stack — gateway, worker pool, smelter, weaver, and browser
 # (http://localhost:3000), plus Neo4j, Qdrant, Ollama, and PostgreSQL.
 # Equivalent end state to `semiont start` (the Semiont launcher).
 #
@@ -26,7 +26,7 @@
 # No account is created by bringing the stack up. Make the first admin with
 # `semiont useradd --repo <owner>/<name> --email … --admin` (it prompts for the
 # password; drop --repo for a local stack), or in-container with `docker compose
-# -f .semiont/compose/backend.yml exec backend semiont-useradd --email …
+# -f .semiont/compose/backend.yml exec gateway semiont-useradd --email …
 # --generate-password --admin`. Neither accepts a password as an argument.
 #
 # Observability (Jaeger sidecar — UI on http://localhost:16686):
@@ -40,7 +40,7 @@
 # The five Semiont services carry `restart: on-failure`: any crash is
 # restarted (with engine backoff). With semiont-worker >= 0.5.13 this closes a
 # self-healing loop for worker stalls — the worker detects processing with no
-# activity for 15 min and exits(1), compose restarts it, and the backend's
+# activity for 15 min and exits(1), compose restarts it, and the gateway's
 # janitor re-queues the held job within 30 min. Infra services deliberately
 # have no restart policy: an infra crash usually wants eyes, not a loop.
 
@@ -119,10 +119,10 @@ services:
       timeout: 3s
       retries: 10
 
-  backend:
-    container_name: semiont-backend
+  gateway:
+    container_name: semiont-gateway
     restart: on-failure
-    image: ghcr.io/the-ai-alliance/semiont-backend:${SEMIONT_VERSION:-latest}
+    image: ghcr.io/the-ai-alliance/semiont-gateway:${SEMIONT_VERSION:-latest}
     ports:
       - "4000:4000"
     mem_limit: 8g
@@ -136,12 +136,12 @@ services:
       QDRANT_HOST: qdrant
       OLLAMA_HOST: ollama
       SEMIONT_WORKER_SECRET: ${SEMIONT_WORKER_SECRET:?SEMIONT_WORKER_SECRET must be set, e.g. export SEMIONT_WORKER_SECRET=$$(openssl rand -hex 32)}
-      # Required by the backend: it refuses to boot without one (requireJwtSecret
-      # in apps/backend/src/auth/jwt.ts). Guarded like the worker secret so a
+      # Required by the gateway: it refuses to boot without one (requireJwtSecret
+      # in apps/gateway/src/auth/jwt.ts). Guarded like the worker secret so a
       # missing value fails with a fix-it instead of a crash-loop.
       # post-create.sh generates it per codespace; `semiont start` injects it on
       # the local path. The sidecars do NOT need it — they authenticate to the
-      # backend with SEMIONT_WORKER_SECRET and verify no tokens.
+      # gateway with SEMIONT_WORKER_SECRET and verify no tokens.
       JWT_SECRET: ${JWT_SECRET:?JWT_SECRET must be set (min 32 chars), e.g. export JWT_SECRET=$$(openssl rand -hex 32)}
       OTEL_EXPORTER_OTLP_ENDPOINT: ${OTEL_EXPORTER_OTLP_ENDPOINT:-}
     depends_on:
@@ -165,7 +165,7 @@ services:
       - ${SEMIONT_CONFIG:-../semiontconfig/ollama-gemma.toml}:/home/semiont/.semiontconfig:ro
     environment:
       ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
-      BACKEND_HOST: backend
+      GATEWAY_HOST: gateway
       OLLAMA_HOST: ollama
       NEO4J_HOST: neo4j
       QDRANT_HOST: qdrant
@@ -173,7 +173,7 @@ services:
       SEMIONT_WORKER_SECRET: ${SEMIONT_WORKER_SECRET:?SEMIONT_WORKER_SECRET must be set, e.g. export SEMIONT_WORKER_SECRET=$$(openssl rand -hex 32)}
       OTEL_EXPORTER_OTLP_ENDPOINT: ${OTEL_EXPORTER_OTLP_ENDPOINT:-}
     depends_on:
-      backend:
+      gateway:
         condition: service_healthy
 
   smelter:
@@ -187,7 +187,7 @@ services:
       - ${SEMIONT_CONFIG:-../semiontconfig/ollama-gemma.toml}:/home/semiont/.semiontconfig:ro
     environment:
       ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
-      BACKEND_HOST: backend
+      GATEWAY_HOST: gateway
       OLLAMA_HOST: ollama
       QDRANT_HOST: qdrant
       NEO4J_HOST: neo4j
@@ -195,10 +195,10 @@ services:
       SEMIONT_WORKER_SECRET: ${SEMIONT_WORKER_SECRET:?SEMIONT_WORKER_SECRET must be set, e.g. export SEMIONT_WORKER_SECRET=$$(openssl rand -hex 32)}
       OTEL_EXPORTER_OTLP_ENDPOINT: ${OTEL_EXPORTER_OTLP_ENDPOINT:-}
     depends_on:
-      backend:
+      gateway:
         condition: service_healthy
 
-  # The graph projection is standalone-only: the backend does not apply
+  # The graph projection is standalone-only: the gateway does not apply
   # events to Neo4j in-process. Without this service the graph stays empty
   # and gathers fail at the buildKnowledgeGraph barrier.
   weaver:
@@ -212,7 +212,7 @@ services:
       - ${SEMIONT_CONFIG:-../semiontconfig/ollama-gemma.toml}:/home/semiont/.semiontconfig:ro
     environment:
       ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
-      BACKEND_HOST: backend
+      GATEWAY_HOST: gateway
       OLLAMA_HOST: ollama
       QDRANT_HOST: qdrant
       NEO4J_HOST: neo4j
@@ -220,20 +220,20 @@ services:
       SEMIONT_WORKER_SECRET: ${SEMIONT_WORKER_SECRET:?SEMIONT_WORKER_SECRET must be set, e.g. export SEMIONT_WORKER_SECRET=$$(openssl rand -hex 32)}
       OTEL_EXPORTER_OTLP_ENDPOINT: ${OTEL_EXPORTER_OTLP_ENDPOINT:-}
     depends_on:
-      backend:
+      gateway:
         condition: service_healthy
 
-  # Static SPA server (@semiont/frontend server.js): no config mount and no
-  # service env — the browser talks to the backend directly on localhost:4000.
-  frontend:
-    container_name: semiont-frontend
+  # Static SPA server (@semiont/browser server.js): no config mount and no
+  # service env — the browser talks to the gateway directly on localhost:4000.
+  browser:
+    container_name: semiont-browser
     restart: on-failure
-    image: ghcr.io/the-ai-alliance/semiont-frontend:${SEMIONT_VERSION:-latest}
+    image: ghcr.io/the-ai-alliance/semiont-browser:${SEMIONT_VERSION:-latest}
     ports:
       - "3000:3000"
     mem_limit: 1g
     depends_on:
-      backend:
+      gateway:
         condition: service_healthy
 
 volumes:

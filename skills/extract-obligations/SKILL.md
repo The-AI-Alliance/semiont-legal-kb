@@ -64,5 +64,5 @@ Add `-e SEMIONT_INTERACTIVE=1 -it` for the synthesis-confirm prompt.
 
 - **Cost.** Two LLM passes — mark.assist (one call per resource) plus yield.fromContext (one per obligation). On a large contract with hundreds of obligations, this is expensive. Scope to a single contract for first runs.
 - **Body markdown structure.** The yield.fromContext call passes `entityTypes: ['Obligation']` so the model knows the structured shape it's producing — obligor, obligee, trigger, duration, source section. Re-tune the directive in `OBLIGATION_INSTRUCTIONS` if you want different fields (e.g., a `material?` boolean for materiality screening).
-- **Re-running adds Obligation resources cumulatively.** No deduplication. Restart the backend or delete existing Obligation resources via the Semiont browser before re-running.
+- **Re-running adds Obligation resources cumulatively.** No deduplication. Restart the stack or delete existing Obligation resources via the Semiont browser before re-running.
 - **Provenance is preserved.** Each Obligation resource has a binding annotation pointing back to the contract paragraph it came from. "Where in the contract does the obligation 'X shall provide annual reports' come from?" is a one-step query.

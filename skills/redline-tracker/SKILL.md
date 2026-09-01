@@ -58,5 +58,5 @@ Add `-e SEMIONT_INTERACTIVE=1 -it` for the confirm prompt.
 
 - **Section detection is heuristic.** The diff splitter looks for markdown headings (`## 4.2 …`, `## Section 4.2 …`, `## Exhibit C …`, etc.). If neither version has detectable headings, the diff falls back to a single whole-document `modified` change.
 - **Provenance closes the loop.** The plan calls for VersionDelta resources to bind to the proposing email / letter / memo where applicable. v1 records the change itself; binding deltas to their proposing correspondence is a follow-up the user can do via `mark.annotation` with a `linking` motivation pointing from the delta into the email — or as a future `attribute-redlines` skill that walks correspondence and binds it automatically.
-- **Re-running on the same versions creates duplicate VersionDelta resources.** No deduplication by version pair. Restart the backend or hand-delete prior deltas before re-running.
+- **Re-running on the same versions creates duplicate VersionDelta resources.** No deduplication by version pair. Restart the stack or hand-delete prior deltas before re-running.
 - **PDF redlines are out of scope.** The skill operates on markdown — for a PDF redline, run a PDF-to-markdown conversion first (out-of-scope helper; future enhancement).

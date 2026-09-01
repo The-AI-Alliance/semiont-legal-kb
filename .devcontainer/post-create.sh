@@ -23,7 +23,7 @@ touch "$ENV_FILE"
 #
 # The local path does not come through here — `semiont start` generates and
 # injects JWT_SECRET per KB root. This is the codespace equivalent, and it was
-# missing: the backend requires the secret and crash-looped without it.
+# missing: the gateway requires the secret and crash-looped without it.
 ensure_secret() {
   local name="$1"
   if ! grep -q "^${name}=" "$ENV_FILE"; then
