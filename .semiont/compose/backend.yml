@@ -1,8 +1,15 @@
-# Semiont stack — gateway, worker pool, smelter, weaver, and browser
-# (http://localhost:3000), plus Neo4j, Qdrant, Ollama, and PostgreSQL.
-# Equivalent end state to `semiont start` (the Semiont launcher).
+# Semiont stack — gateway, archivist, librarian, worker pool, smelter, weaver,
+# and browser (http://localhost:3000), plus Neo4j, Qdrant, Ollama, and
+# PostgreSQL. Equivalent end state to `semiont start` (the Semiont launcher).
 #
-# The four service images are pulled from GHCR (they ship config-free); the
+# The gateway holds identity, the wire, bytes, and the job queue; it hosts no
+# actors. The ARCHIVIST owns the record (Stower accessions it, Browser serves
+# browse:* from the projections) and is the ONLY container that mounts the
+# knowledge base. The LIBRARIAN owns the two LLM-bound actors, gather and
+# search. Keep this file's service set in step with the launcher's roles table
+# — they decide the same thing in two places, and nothing fails when they drift.
+#
+# The seven service images are pulled from GHCR (they ship config-free); the
 # selected config TOML is bind-mounted at runtime. Set SEMIONT_VERSION to choose
 # an image tag (default: latest). NOTE: relative paths in this file resolve
 # against the compose file's directory (.semiont/compose), so SEMIONT_CONFIG is
@@ -37,7 +44,7 @@
 #   export SEMIONT_VERSION=0.5.12
 #   docker compose -f .semiont/compose/backend.yml pull
 #
-# The five Semiont services carry `restart: on-failure`: any crash is
+# The seven Semiont services carry `restart: on-failure`: any crash is
 # restarted (with engine backoff). With semiont-worker >= 0.5.13 this closes a
 # self-healing loop for worker stalls — the worker detects processing with no
 # activity for 15 min and exits(1), compose restarts it, and the gateway's
@@ -51,6 +58,9 @@ services:
     ports:
       - "7474:7474"
       - "7687:7687"
+    volumes:
+      - semiont_neo4j_data:/data
+      - semiont_neo4j_logs:/logs
     environment:
       NEO4J_AUTH: neo4j/localpass
       NEO4J_ACCEPT_LICENSE_AGREEMENT: "yes"
@@ -67,6 +77,8 @@ services:
     image: qdrant/qdrant:v1.18.3
     ports:
       - "6333:6333"
+    volumes:
+      - semiont_qdrant:/qdrant/storage
     healthcheck:
       # qdrant image is minimal — no curl/wget/nc, but has bash. Port-open
       # check via /dev/tcp; qdrant binds its REST port only after it's ready.
@@ -97,7 +109,12 @@ services:
     image: postgres:15.18-alpine
     ports:
       - "5432:5432"
+    volumes:
+      - semiont_postgres:/var/lib/postgresql/data
     environment:
+      # A subdirectory of the mount, not the mount itself: initdb refuses a
+      # data directory it does not own outright. Same value the launcher uses.
+      PGDATA: /var/lib/postgresql/data/pgdata
       POSTGRES_PASSWORD: localpass
       POSTGRES_DB: semiont
     healthcheck:
@@ -125,12 +142,18 @@ services:
     image: ghcr.io/the-ai-alliance/semiont-gateway:${SEMIONT_VERSION:-latest}
     ports:
       - "4000:4000"
-    mem_limit: 8g
+    # 2g, as the launcher runs it: the gateway hosts no actors and mounts no
+    # knowledge base, so the 8g it carried when it held both is no longer what
+    # it needs.
+    mem_limit: 2g
     volumes:
-      - ../..:/kb
+      # NO /kb mount: exactly one container touches the knowledge base tree and
+      # it is the archivist (SINGLE-KB-MOUNT). The gateway is not the byte path.
       - ${SEMIONT_CONFIG:-../semiontconfig/ollama-gemma.toml}:/home/semiont/.semiontconfig:ro
+      - semiont_state:/semiont-state
     environment:
       ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
+      XDG_STATE_HOME: /semiont-state
       POSTGRES_HOST: postgres
       NEO4J_HOST: neo4j
       QDRANT_HOST: qdrant
@@ -154,6 +177,61 @@ services:
       postgres:
         condition: service_healthy
 
+  # Owns the record: accessions events, maintains the projections derived from
+  # them, and answers browse:*. The ONLY container that mounts the KB — it holds
+  # both the bytes and the views, so the annotation-context read lives here too.
+  archivist:
+    container_name: semiont-archivist
+    restart: on-failure
+    image: ghcr.io/the-ai-alliance/semiont-archivist:${SEMIONT_VERSION:-latest}
+    ports:
+      - "9093:9093"
+    mem_limit: 2g
+    volumes:
+      - ../..:/kb
+      - ${SEMIONT_CONFIG:-../semiontconfig/ollama-gemma.toml}:/home/semiont/.semiontconfig:ro
+      - semiont_anchored_text:/anchored-text
+      - semiont_state:/semiont-state
+    environment:
+      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
+      GATEWAY_HOST: gateway
+      XDG_STATE_HOME: /semiont-state
+      OLLAMA_HOST: ollama
+      NEO4J_HOST: neo4j
+      QDRANT_HOST: qdrant
+      POSTGRES_HOST: postgres
+      SEMIONT_WORKER_SECRET: ${SEMIONT_WORKER_SECRET:?SEMIONT_WORKER_SECRET must be set, e.g. export SEMIONT_WORKER_SECRET=$$(openssl rand -hex 32)}
+      OTEL_EXPORTER_OTLP_ENDPOINT: ${OTEL_EXPORTER_OTLP_ENDPOINT:-}
+    depends_on:
+      gateway:
+        condition: service_healthy
+
+  # Owns the two LLM-bound actors: gather and search. Mounts no KB — it reads
+  # the projections through the shared state volume and dials the gateway.
+  librarian:
+    container_name: semiont-librarian
+    restart: on-failure
+    image: ghcr.io/the-ai-alliance/semiont-librarian:${SEMIONT_VERSION:-latest}
+    ports:
+      - "9094:9094"
+    mem_limit: 2g
+    volumes:
+      - ${SEMIONT_CONFIG:-../semiontconfig/ollama-gemma.toml}:/home/semiont/.semiontconfig:ro
+      - semiont_state:/semiont-state
+    environment:
+      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
+      GATEWAY_HOST: gateway
+      XDG_STATE_HOME: /semiont-state
+      OLLAMA_HOST: ollama
+      NEO4J_HOST: neo4j
+      QDRANT_HOST: qdrant
+      POSTGRES_HOST: postgres
+      SEMIONT_WORKER_SECRET: ${SEMIONT_WORKER_SECRET:?SEMIONT_WORKER_SECRET must be set, e.g. export SEMIONT_WORKER_SECRET=$$(openssl rand -hex 32)}
+      OTEL_EXPORTER_OTLP_ENDPOINT: ${OTEL_EXPORTER_OTLP_ENDPOINT:-}
+    depends_on:
+      gateway:
+        condition: service_healthy
+
   worker:
     container_name: semiont-worker
     restart: on-failure
@@ -175,6 +253,8 @@ services:
     depends_on:
       gateway:
         condition: service_healthy
+      archivist:
+        condition: service_healthy
 
   smelter:
     container_name: semiont-smelter
@@ -185,6 +265,7 @@ services:
     mem_limit: 2g
     volumes:
       - ${SEMIONT_CONFIG:-../semiontconfig/ollama-gemma.toml}:/home/semiont/.semiontconfig:ro
+      - semiont_anchored_text:/anchored-text
     environment:
       ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
       GATEWAY_HOST: gateway
@@ -236,5 +317,18 @@ services:
       gateway:
         condition: service_healthy
 
+# Infra state survives `docker compose down`, matching what `semiont start`
+# keeps on the host. The graph and the vectors are projections and could be
+# rebuilt from the event log, but PostgreSQL holds the USERS — and accounts are
+# not derived from the event log, nothing auto-creates one, so without this the
+# first admin disappears on every down/up cycle.
 volumes:
   ollama_models:
+  semiont_neo4j_data:
+  semiont_neo4j_logs:
+  semiont_qdrant:
+  semiont_postgres:
+  # Shared by gateway + archivist + librarian (XDG_STATE_HOME).
+  semiont_state:
+  # Written by the smelter, read by the archivist.
+  semiont_anchored_text:

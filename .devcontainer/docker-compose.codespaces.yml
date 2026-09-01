@@ -7,11 +7,28 @@
 #                  -f .devcontainer/docker-compose.codespaces.yml \
 #                  --profile observe up -d --wait
 
+# This file states the COMPLETE codespace sizing, not a diff against the base.
+# Some entries repeat the base value (gateway, archivist, worker, browser) and
+# that repetition is deliberate: the codespace is the memory-constrained target,
+# so its numbers are pinned here rather than inherited. Raising a limit in
+# backend.yml must not silently raise it on a 16GB machine — change it here too,
+# on purpose. Keep every service listed, including ones that happen to match.
+#
+# Declared totals: ollama 4 + gateway 2 + archivist 2 + librarian 1 + worker 2
+# + smelter 1 + weaver 1 + browser 1 = 14g, against a 16GB machine that also
+# runs neo4j, qdrant, postgres and (under `observe`) jaeger uncapped. That is
+# tight, and it got tighter when 0.5.29 split two services out of the gateway.
+# The archivist is the one to keep roomy: it holds the KB bytes and the views.
+
 services:
   ollama:
     mem_limit: 4g
   gateway:
     mem_limit: 2g
+  archivist:
+    mem_limit: 2g
+  librarian:
+    mem_limit: 1g
   worker:
     mem_limit: 2g
   smelter:
