@@ -1,5 +1,5 @@
 {
-  "name": "semiont-legal-kb",
+  "name": "Semiont Template KB",
   "image": "mcr.microsoft.com/devcontainers/base:ubuntu-24.04",
 
   "features": {
@@ -22,22 +22,24 @@
     // Bind-mount source for compose; resolved relative to the compose project
     // dir (.semiont/compose/), NOT the repo root.
     "SEMIONT_CONFIG": "../semiontconfig/anthropic.toml",
-    "OTEL_EXPORTER_OTLP_ENDPOINT": "http://jaeger:4318",
+    "OTEL_EXPORTER_OTLP_ENDPOINT": "http://collector:4318",
     "ANTHROPIC_API_KEY": "${localEnv:ANTHROPIC_API_KEY}"
   },
 
   "postCreateCommand": ".devcontainer/post-create.sh",
   "postStartCommand": ".devcontainer/post-start.sh",
 
-  "forwardPorts": [3000, 4000, 16686, 7474, 9090, 9091, 9092],
+  "forwardPorts": [3000, 4000, 16686, 9090, 24110, 7474, 24100, 24101, 24102],
   "portsAttributes": {
     "3000": { "label": "Semiont Browser", "onAutoForward": "notify" },
     "4000": { "label": "Gateway API", "onAutoForward": "notify" },
     "16686": { "label": "Jaeger UI", "onAutoForward": "notify" },
+    "9090": { "label": "Prometheus", "onAutoForward": "notify" },
+    "24110": { "label": "Collector metrics", "onAutoForward": "silent" },
     "7474": { "label": "Neo4j Browser", "onAutoForward": "silent" },
-    "9090": { "label": "Worker health", "onAutoForward": "silent" },
-    "9091": { "label": "Smelter health", "onAutoForward": "silent" },
-    "9092": { "label": "Weaver health", "onAutoForward": "silent" }
+    "24100": { "label": "Worker health", "onAutoForward": "silent" },
+    "24101": { "label": "Smelter health", "onAutoForward": "silent" },
+    "24102": { "label": "Weaver health", "onAutoForward": "silent" }
   },
 
   "customizations": {
