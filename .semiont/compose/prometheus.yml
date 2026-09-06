@@ -1,0 +1,17 @@
+# Prometheus for the compose stack — scrapes the collector's readout.
+#
+# SEE ALSO `prometheusConfig` in apps/launcher/internal/launcher/start.go: same
+# shape, and the scrape target must stay the collector's readout port (24110)
+# in both homes. Here the target is a compose service name; the launcher writes
+# a host address instead.
+#
+# Ephemeral by design: no volume. Observability data is disposable in a dev
+# stack, which is the same posture the launcher takes.
+
+global:
+  scrape_interval: 15s
+
+scrape_configs:
+  - job_name: semiont
+    static_configs:
+      - targets: ["collector:24110"]

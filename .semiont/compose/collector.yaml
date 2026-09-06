@@ -1,0 +1,40 @@
+# OpenTelemetry collector for the compose stack.
+#
+# Every Semiont service exports here (OTEL_EXPORTER_OTLP_ENDPOINT =
+# http://collector:4318, set in .devcontainer/devcontainer.json). The collector
+# fans out: traces to Jaeger, metrics to a Prometheus-format readout that the
+# prometheus service scrapes. Before this existed, both signals went down one
+# pipe to a traces-only Jaeger and the metrics were silently discarded.
+#
+# SEE ALSO the launcher's generated equivalent — `collectorConfig` in
+# apps/launcher/internal/launcher/start.go. Same SHAPE by intent; the content
+# differs on purpose and is NOT a copy that drifted:
+#   - here traces go to `http://jaeger:4318` (compose gives each service its own
+#     port space); the launcher must remap Jaeger to 14318 because there the
+#     collector already owns 4318 on the shared host.
+#   - no `nop` variant is needed: a stack composed without `--profile observe`
+#     leaves OTEL_EXPORTER_OTLP_ENDPOINT unset, so services export nothing.
+# If the exporter/scrape shape changes in one home, change it in the other.
+
+receivers:
+  otlp:
+    protocols:
+      http:
+        endpoint: 0.0.0.0:4318
+
+exporters:
+  # Traces → Jaeger, over the compose network on its native OTLP port.
+  otlphttp/jaeger:
+    endpoint: http://jaeger:4318
+  # Metrics readout: the prometheus service scrapes :24110/metrics.
+  prometheus:
+    endpoint: 0.0.0.0:24110
+
+service:
+  pipelines:
+    traces:
+      receivers: [otlp]
+      exporters: [otlphttp/jaeger]
+    metrics:
+      receivers: [otlp]
+      exporters: [prometheus]

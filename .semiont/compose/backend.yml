@@ -1,6 +1,8 @@
 # Semiont stack — gateway, archivist, librarian, worker pool, smelter, weaver,
 # and browser (http://localhost:3000), plus Neo4j, Qdrant, Ollama, and
-# PostgreSQL. Equivalent end state to `semiont start` (the Semiont launcher).
+# PostgreSQL. Under `--profile observe` it also runs the telemetry trio:
+# an OTel collector (every service's export target), Prometheus (scrapes the
+# collector's readout on 24110), and Jaeger (traces). Equivalent end state to `semiont start` (the Semiont launcher).
 #
 # The gateway holds identity, the wire, bytes, and the job queue; it hosts no
 # actors. The ARCHIVIST owns the record (Stower accessions it, Browser serves
@@ -128,13 +130,44 @@ services:
     image: jaegertracing/all-in-one:1.76.0
     profiles: ["observe"]
     ports:
+      # 4318 is deliberately NOT published: the collector owns the port every
+      # service targets, and Jaeger's OTLP ingest is reached as `jaeger:4318`
+      # over the compose network. (The launcher remaps Jaeger to 14318 instead,
+      # because there every container shares one host port space.)
       - "16686:16686"
-      - "4318:4318"
     healthcheck:
       test: ["CMD", "wget", "-qO-", "http://localhost:16686"]
       interval: 5s
       timeout: 3s
       retries: 10
+
+  # OpenTelemetry collector — the single endpoint every service exports to.
+  # Without it, traces AND metrics go down one pipe to a traces-only Jaeger and
+  # the metrics are silently dropped; that is the bug this service fixes.
+  # No healthcheck: the image is distroless (no wget/curl) and nothing
+  # depends_on it — a service with no endpoint set simply exports nothing.
+  collector:
+    container_name: semiont-otel-collector
+    image: otel/opentelemetry-collector:0.137.0
+    profiles: ["observe"]
+    ports:
+      - "4318:4318"
+      - "24110:24110"
+    mem_limit: 1g
+    volumes:
+      - ./collector.yaml:/etc/otelcol/config.yaml:ro
+
+  # Prometheus scrapes the collector's readout. 9090 is its product port and is
+  # free here only because the internal services moved to the 241xx block.
+  prometheus:
+    container_name: semiont-prometheus
+    image: prom/prometheus:v3.9.1
+    profiles: ["observe"]
+    ports:
+      - "9090:9090"
+    mem_limit: 1g
+    volumes:
+      - ./prometheus.yml:/etc/prometheus/prometheus.yml:ro
 
   gateway:
     container_name: semiont-gateway
@@ -185,7 +218,7 @@ services:
     restart: on-failure
     image: ghcr.io/the-ai-alliance/semiont-archivist:${SEMIONT_VERSION:-latest}
     ports:
-      - "9093:9093"
+      - "24103:24103"
     mem_limit: 2g
     volumes:
       - ../..:/kb
@@ -213,7 +246,7 @@ services:
     restart: on-failure
     image: ghcr.io/the-ai-alliance/semiont-librarian:${SEMIONT_VERSION:-latest}
     ports:
-      - "9094:9094"
+      - "24104:24104"
     mem_limit: 2g
     volumes:
       - ${SEMIONT_CONFIG:-../semiontconfig/ollama-gemma.toml}:/home/semiont/.semiontconfig:ro
@@ -237,7 +270,7 @@ services:
     restart: on-failure
     image: ghcr.io/the-ai-alliance/semiont-worker:${SEMIONT_VERSION:-latest}
     ports:
-      - "9090:9090"
+      - "24100:24100"
     mem_limit: 2g
     volumes:
       - ${SEMIONT_CONFIG:-../semiontconfig/ollama-gemma.toml}:/home/semiont/.semiontconfig:ro
@@ -261,7 +294,7 @@ services:
     restart: on-failure
     image: ghcr.io/the-ai-alliance/semiont-smelter:${SEMIONT_VERSION:-latest}
     ports:
-      - "9091:9091"
+      - "24101:24101"
     mem_limit: 2g
     volumes:
       - ${SEMIONT_CONFIG:-../semiontconfig/ollama-gemma.toml}:/home/semiont/.semiontconfig:ro
@@ -287,7 +320,7 @@ services:
     restart: on-failure
     image: ghcr.io/the-ai-alliance/semiont-weaver:${SEMIONT_VERSION:-latest}
     ports:
-      - "9092:9092"
+      - "24102:24102"
     mem_limit: 3g
     volumes:
       - ${SEMIONT_CONFIG:-../semiontconfig/ollama-gemma.toml}:/home/semiont/.semiontconfig:ro
