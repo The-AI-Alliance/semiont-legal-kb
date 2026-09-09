@@ -102,11 +102,14 @@ toml_value() {
     }' "$3"
 }
 
+# Strip the surrounding quotes off a TOML string. Only for values this script
+# uses as shell strings; the ones it re-emits into the staged config keep their
+# source text verbatim, which is what toml_value is careful to preserve.
+unquote() { local v=${1%\"}; echo "${v#\"}"; }
+
 # The environment these sections live under — `[defaults] environment` in the
 # selected config, which is what the containers load.
-KB_ENV_RAW=$(toml_value defaults environment "$SOURCE_CONFIG")
-KB_ENV=${KB_ENV_RAW%\"}
-KB_ENV=${KB_ENV#\"}
+KB_ENV=$(unquote "$(toml_value defaults environment "$SOURCE_CONFIG")")
 if [[ -z "$KB_ENV" ]]; then KB_ENV="local"; fi
 
 KB_NAME=$(toml_value project name .semiont/config)
@@ -178,6 +181,51 @@ docker compose "${COMPOSE_FILES[@]}" run --rm --no-deps --user root \
   --entrypoint sh gateway -c \
   'mkdir -p /semiont-state && chown -R 1001:1001 /semiont-state' >/dev/null
 
+# ── Embedding model, ahead of every service that needs it ───────────────────
+#
+# A fresh KB has an empty Qdrant, so the archivist, librarian and smelter each
+# create their vector collections on boot — which needs the embedding model's
+# dimensionality, which needs the model to be present. Ollama answers 404 until
+# it is pulled and all three exit(1).
+#
+# That alone would be survivable, since compose restarts them. What is not:
+# `worker` is the only service with `depends_on: archivist: service_healthy`,
+# and while the archivist flaps compose abandons it in `Created` — where no
+# restart policy can reach it, because the container never ran and there is no
+# failure to restart from. The KB then comes up with no worker pool at all and
+# nothing says so, the launcher's probe being the gateway.
+#
+# The cost is that ollama's image (the largest) now pulls on its own instead of
+# overlapping the others. Deliberate: a slower first boot beats a silently
+# crippled one. This is NOT the whole fix — the services should also tolerate a
+# cold cache rather than treating it as fatal; see the monorepo's
+# .plans/bugs/cold-embedding-model-is-fatal-at-boot.md.
+#
+# The model NAME is read from the config, never spelled here: it is declared in
+# [environments.<env>.embedding], and a second copy in this script would be one
+# fact in two files with nothing keeping them equal.
+EMBED_TYPE=$(unquote "$(toml_value "environments.${KB_ENV}.embedding" type "$SOURCE_CONFIG")")
+EMBED_MODEL=$(unquote "$(toml_value "environments.${KB_ENV}.embedding" model "$SOURCE_CONFIG")")
+
+if [[ "$EMBED_TYPE" == "ollama" ]]; then
+  if [[ -z "$EMBED_MODEL" ]]; then
+    echo "ERROR: [environments.${KB_ENV}.embedding] sets type = \"ollama\" but declares no model."
+    exit 1
+  fi
+  # 600s, not the 300 the full stack gets: this step now carries the ollama
+  # image pull by itself rather than in parallel with the other six.
+  echo "Starting ollama and pulling the embedding model '$EMBED_MODEL'..."
+  docker compose "${COMPOSE_FILES[@]}" up -d --wait --wait-timeout 600 ollama
+  if ! docker compose "${COMPOSE_FILES[@]}" exec -T ollama ollama pull "$EMBED_MODEL"; then
+    echo
+    echo "ERROR: could not pull the embedding model '$EMBED_MODEL'."
+    echo "  The archivist, librarian and smelter cannot create their vector"
+    echo "  collections without it, and 'worker' would not start at all."
+    echo "  Retry with:  bash .devcontainer/post-start.sh"
+    exit 1
+  fi
+fi
+
 # Services that mount the staged config. The browser has no config mount, and
 # the infra services are not ours to churn, so neither is listed.
 STAGED_CONSUMERS=(gateway archivist librarian worker smelter weaver)
@@ -193,10 +241,6 @@ COMPOSE_OK=true
 if ! docker compose "${COMPOSE_FILES[@]}" --profile observe up -d --wait --wait-timeout 300; then
   COMPOSE_OK=false
 fi
-
-# Best-effort embedding-model pull (idempotent, ignored on failure)
-docker compose "${COMPOSE_FILES[@]}" exec -T ollama \
-  ollama pull nomic-embed-text 2>/dev/null || true
 
 if $COMPOSE_OK; then
   cat <<EOF
@@ -222,7 +266,7 @@ else
   echo
   echo "── service state ─────────────────────────────────────────────────"
   docker compose "${COMPOSE_FILES[@]}" ps || true
-  for svc in gateway worker smelter weaver browser; do
+  for svc in gateway archivist librarian worker smelter weaver browser; do
     echo
     echo "── $svc (last 100 log lines) ────────────────────────────────────"
     docker compose "${COMPOSE_FILES[@]}" logs --tail=100 "$svc" 2>&1 || true
