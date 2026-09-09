@@ -181,29 +181,13 @@ docker compose "${COMPOSE_FILES[@]}" run --rm --no-deps --user root \
   --entrypoint sh gateway -c \
   'mkdir -p /semiont-state && chown -R 1001:1001 /semiont-state' >/dev/null
 
-# ── Embedding model, ahead of every service that needs it ───────────────────
+# Pull the embedding model BEFORE the stack: archivist, librarian and smelter
+# create vector collections on boot and exit(1) without it — and while the
+# archivist flaps, compose abandons `worker` (its only service_healthy
+# dependent) in `Created`, where no restart policy reaches it.
 #
-# A fresh KB has an empty Qdrant, so the archivist, librarian and smelter each
-# create their vector collections on boot — which needs the embedding model's
-# dimensionality, which needs the model to be present. Ollama answers 404 until
-# it is pulled and all three exit(1).
-#
-# That alone would be survivable, since compose restarts them. What is not:
-# `worker` is the only service with `depends_on: archivist: service_healthy`,
-# and while the archivist flaps compose abandons it in `Created` — where no
-# restart policy can reach it, because the container never ran and there is no
-# failure to restart from. The KB then comes up with no worker pool at all and
-# nothing says so, the launcher's probe being the gateway.
-#
-# The cost is that ollama's image (the largest) now pulls on its own instead of
-# overlapping the others. Deliberate: a slower first boot beats a silently
-# crippled one. This is NOT the whole fix — the services should also tolerate a
-# cold cache rather than treating it as fatal; see the monorepo's
-# .plans/bugs/cold-embedding-model-is-fatal-at-boot.md.
-#
-# The model NAME is read from the config, never spelled here: it is declared in
-# [environments.<env>.embedding], and a second copy in this script would be one
-# fact in two files with nothing keeping them equal.
+# The model name comes from [environments.<env>.embedding]; a copy here would
+# be one fact in two files.
 EMBED_TYPE=$(unquote "$(toml_value "environments.${KB_ENV}.embedding" type "$SOURCE_CONFIG")")
 EMBED_MODEL=$(unquote "$(toml_value "environments.${KB_ENV}.embedding" model "$SOURCE_CONFIG")")
 
@@ -212,8 +196,8 @@ if [[ "$EMBED_TYPE" == "ollama" ]]; then
     echo "ERROR: [environments.${KB_ENV}.embedding] sets type = \"ollama\" but declares no model."
     exit 1
   fi
-  # 600s, not the 300 the full stack gets: this step now carries the ollama
-  # image pull by itself rather than in parallel with the other six.
+  # Generous: usually instant (post-create.sh already pulled), but this may
+  # carry the 3.7 GB ollama image if that pull did not land.
   echo "Starting ollama and pulling the embedding model '$EMBED_MODEL'..."
   docker compose "${COMPOSE_FILES[@]}" up -d --wait --wait-timeout 600 ollama
   if ! docker compose "${COMPOSE_FILES[@]}" exec -T ollama ollama pull "$EMBED_MODEL"; then
