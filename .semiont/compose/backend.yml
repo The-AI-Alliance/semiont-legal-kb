@@ -47,11 +47,18 @@
 #   docker compose -f .semiont/compose/backend.yml pull
 #
 # The seven Semiont services carry `restart: on-failure`: any crash is
-# restarted (with engine backoff). With semiont-worker >= 0.5.13 this closes a
-# self-healing loop for worker stalls — the worker detects processing with no
-# activity for 15 min and exits(1), compose restarts it, and the gateway's
-# janitor re-queues the held job within 30 min. Infra services deliberately
-# have no restart policy: an infra crash usually wants eyes, not a loop.
+# restarted (with engine backoff). This closes a self-healing loop for worker
+# stalls — the worker detects processing with no activity for 15 min and
+# exits(1), compose restarts it, and the gateway's janitor re-queues the held
+# job within 30 min. Infra services deliberately have no restart policy: an
+# infra crash usually wants eyes, not a loop.
+#
+# Do NOT set SEMIONT_SUPERVISE. It starts an in-container supervisor that
+# restarts the process itself, so the container never exits and every
+# `restart:` above becomes dead text — a crash-looping process reads as
+# healthy from out here. It exists for `semiont start`, which brings the stack
+# up and leaves nothing watching it. Compose is that watcher; the images run
+# one process and exit.
 
 services:
   neo4j:
