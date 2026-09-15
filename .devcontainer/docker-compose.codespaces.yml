@@ -21,8 +21,8 @@
 #
 # Declared totals: ollama 4 + gateway 2 + archivist 2 + librarian 1 + worker 2
 # + smelter 1 + weaver 1 + browser 1, plus the telemetry trio at 1g each
-# (collector, prometheus, jaeger) = 17g, leaving neo4j, qdrant and postgres
-# uncapped. On the 32GB machine the launcher actually requests that is
+# (collector, prometheus, jaeger) and nats at 512m = 17.5g, leaving neo4j,
+# qdrant and postgres uncapped. On the 32GB machine the launcher actually requests that is
 # comfortable. The archivist is the one to keep roomy: it holds the KB bytes
 # and the views.
 
@@ -49,3 +49,6 @@ services:
     mem_limit: 1g
   jaeger:
     mem_limit: 1g
+  nats:
+    # 512m, as the launcher runs it.
+    mem_limit: 512m
