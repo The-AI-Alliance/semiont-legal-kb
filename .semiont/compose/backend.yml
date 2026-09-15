@@ -132,6 +132,25 @@ services:
       timeout: 3s
       retries: 10
 
+  nats:
+    container_name: semiont-nats
+    image: nats:2.14.0-alpine
+    # -js turns JetStream on; -sd puts its store on the named volume so queued
+    # work survives a restart. Same flags the launcher runs.
+    command: ["-js", "-sd", "/data"]
+    ports:
+      - "4222:4222"
+    volumes:
+      - semiont_nats:/data
+    healthcheck:
+      # This image has busybox nc but no bash, so the /dev/tcp form used for
+      # qdrant above does not work here. A port-open check, like the launcher's.
+      test: ["CMD-SHELL", "nc -z localhost 4222"]
+      interval: 5s
+      timeout: 3s
+      retries: 12
+      start_period: 5s
+
   jaeger:
     container_name: semiont-jaeger
     image: jaegertracing/all-in-one:1.76.0
@@ -195,6 +214,7 @@ services:
       ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
       XDG_STATE_HOME: /semiont-state
       POSTGRES_HOST: postgres
+      NATS_HOST: nats
       NEO4J_HOST: neo4j
       QDRANT_HOST: qdrant
       OLLAMA_HOST: ollama
@@ -208,6 +228,8 @@ services:
       JWT_SECRET: ${JWT_SECRET:?JWT_SECRET must be set (min 32 chars), e.g. export JWT_SECRET=$$(openssl rand -hex 32)}
       OTEL_EXPORTER_OTLP_ENDPOINT: ${OTEL_EXPORTER_OTLP_ENDPOINT:-}
     depends_on:
+      nats:
+        condition: service_healthy
       neo4j:
         condition: service_healthy
       qdrant:
@@ -240,6 +262,7 @@ services:
       NEO4J_HOST: neo4j
       QDRANT_HOST: qdrant
       POSTGRES_HOST: postgres
+      NATS_HOST: nats
       SEMIONT_WORKER_SECRET: ${SEMIONT_WORKER_SECRET:?SEMIONT_WORKER_SECRET must be set, e.g. export SEMIONT_WORKER_SECRET=$$(openssl rand -hex 32)}
       OTEL_EXPORTER_OTLP_ENDPOINT: ${OTEL_EXPORTER_OTLP_ENDPOINT:-}
     depends_on:
@@ -266,6 +289,7 @@ services:
       NEO4J_HOST: neo4j
       QDRANT_HOST: qdrant
       POSTGRES_HOST: postgres
+      NATS_HOST: nats
       SEMIONT_WORKER_SECRET: ${SEMIONT_WORKER_SECRET:?SEMIONT_WORKER_SECRET must be set, e.g. export SEMIONT_WORKER_SECRET=$$(openssl rand -hex 32)}
       OTEL_EXPORTER_OTLP_ENDPOINT: ${OTEL_EXPORTER_OTLP_ENDPOINT:-}
     depends_on:
@@ -288,6 +312,7 @@ services:
       NEO4J_HOST: neo4j
       QDRANT_HOST: qdrant
       POSTGRES_HOST: postgres
+      NATS_HOST: nats
       SEMIONT_WORKER_SECRET: ${SEMIONT_WORKER_SECRET:?SEMIONT_WORKER_SECRET must be set, e.g. export SEMIONT_WORKER_SECRET=$$(openssl rand -hex 32)}
       OTEL_EXPORTER_OTLP_ENDPOINT: ${OTEL_EXPORTER_OTLP_ENDPOINT:-}
     depends_on:
@@ -313,6 +338,7 @@ services:
       QDRANT_HOST: qdrant
       NEO4J_HOST: neo4j
       POSTGRES_HOST: postgres
+      NATS_HOST: nats
       SEMIONT_WORKER_SECRET: ${SEMIONT_WORKER_SECRET:?SEMIONT_WORKER_SECRET must be set, e.g. export SEMIONT_WORKER_SECRET=$$(openssl rand -hex 32)}
       OTEL_EXPORTER_OTLP_ENDPOINT: ${OTEL_EXPORTER_OTLP_ENDPOINT:-}
     depends_on:
@@ -338,6 +364,7 @@ services:
       QDRANT_HOST: qdrant
       NEO4J_HOST: neo4j
       POSTGRES_HOST: postgres
+      NATS_HOST: nats
       SEMIONT_WORKER_SECRET: ${SEMIONT_WORKER_SECRET:?SEMIONT_WORKER_SECRET must be set, e.g. export SEMIONT_WORKER_SECRET=$$(openssl rand -hex 32)}
       OTEL_EXPORTER_OTLP_ENDPOINT: ${OTEL_EXPORTER_OTLP_ENDPOINT:-}
     depends_on:
@@ -368,6 +395,8 @@ volumes:
   semiont_neo4j_logs:
   semiont_qdrant:
   semiont_postgres:
+  # JetStream's store — queued work survives a restart.
+  semiont_nats:
   # Shared by gateway + archivist + librarian (XDG_STATE_HOME).
   semiont_state:
   # Written by the smelter, read by the archivist.
