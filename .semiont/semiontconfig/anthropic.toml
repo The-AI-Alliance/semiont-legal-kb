@@ -14,6 +14,10 @@ publicURL = "http://${GATEWAY_HOST:-localhost}:4000"
 type = "jetstream"
 servers = "${NATS_HOST}:4222"
 
+[environments.local.signal]
+type = "nats"
+servers = "${NATS_HOST}:4222"
+
 [environments.local.graph]
 platform = "external"
 type = "neo4j"
