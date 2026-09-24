@@ -10,9 +10,3 @@ sync = true
 # never env-templated, never a machine address.
 domain = "the-ai-alliance.github.io:semiont-legal-kb"
 siteName = "Legal Knowledge Base (Synthetic Documents)"
-# Google-OAuth sign-in allowlist: an email's domain must match this list
-# exactly. Local password sign-in does not consult it. RFC 2606 reserved, so
-# it admits nobody — the intent for a public demo KB. NOT `[]`: the launcher
-# stages this key only when the list is non-empty, and the gateway refuses to
-# start without it.
-oauthAllowedDomains = ["example.com"]

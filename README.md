@@ -60,7 +60,7 @@ semiont start --runtime codespace --repo The-AI-Alliance/semiont-legal-kb
 No account exists until you make one — the same as a local stack (it prompts for the password):
 
 ```bash
-semiont useradd --repo The-AI-Alliance/semiont-legal-kb --email you@example.com --admin
+semiont useradd --repo The-AI-Alliance/semiont-legal-kb --email you@example.com
 ```
 
 The browser runs **locally** and connects to any number of knowledge bases — cloud or local:
@@ -80,8 +80,8 @@ gh codespace ports forward 3000:3000 4000:4000   # leave running
 
 # In another terminal, create the first admin (nothing creates one for you).
 # --generate-password prints a random password once; there is no --password flag:
-gh codespace ssh -- 'cd /workspaces/* && docker compose -f .semiont/compose/backend.yml \
-  exec -T gateway semiont-useradd --email you@example.com --generate-password --admin'
+semiont useradd --repo The-AI-Alliance/semiont-legal-kb \
+  --email you@example.com --generate-password
 ```
 
 This forwards the codespace's own browser as well, so you open **http://localhost:3000** and sign in as the admin you just created. If `gh` rejects the forward with `must have admin rights to Repository`, grant the scope once: `gh auth refresh -h github.com -s codespace`.

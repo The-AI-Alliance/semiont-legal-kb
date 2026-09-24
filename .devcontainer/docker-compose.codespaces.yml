@@ -20,9 +20,9 @@
 # purpose. Keep every service listed, including ones that happen to match.
 #
 # Declared totals: ollama 4 + gateway 2 + archivist 2 + librarian 1 + worker 2
-# + smelter 1 + weaver 1 + browser 1, plus the telemetry trio at 1g each
-# (collector, prometheus, jaeger) and nats at 512m = 17.5g, leaving neo4j,
-# qdrant and postgres uncapped. On the 32GB machine the launcher actually requests that is
+# + smelter 1 + weaver 1 + dispatcher 2 + browser 1, plus the telemetry trio at
+# 1g each (collector, prometheus, jaeger) and nats at 512m = 19.5g, leaving
+# neo4j, qdrant and postgres uncapped. On the 32GB machine the launcher actually requests that is
 # comfortable. The archivist is the one to keep roomy: it holds the KB bytes
 # and the views.
 
@@ -41,6 +41,9 @@ services:
     mem_limit: 1g
   weaver:
     mem_limit: 1g
+  dispatcher:
+    # 2g, as the launcher runs it.
+    mem_limit: 2g
   browser:
     mem_limit: 1g
   collector:
