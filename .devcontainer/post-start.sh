@@ -36,14 +36,12 @@ No user account exists yet — create the first admin
   the password; no password is ever passed as an argument:
 
     semiont useradd --repo ${REPO_SLUG:-<owner>/<repo>} \\
-      --email you@example.com --admin
+      --email you@example.com
 
   Or from a terminal in this Codespace (--generate-password prints a
   random one once; use --password-stdin to choose your own):
 
-    docker compose -f .semiont/compose/backend.yml \\
-      exec gateway semiont-useradd \\
-      --email you@example.com --generate-password --admin
+    semiont useradd --email you@example.com --generate-password
 ──────────────────────────────────────────────────────────────────────
 
 EOF

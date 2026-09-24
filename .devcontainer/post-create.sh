@@ -13,9 +13,7 @@ touch "$ENV_FILE"
 
 # Per-codespace secrets, generated once and KEPT.
 #
-# Each is added independently and APPENDED — an earlier version wrote with `>`,
-# which was safe with one secret and would silently erase the other now that
-# there are two.
+# Appended, never overwritten, so adding a second secret cannot erase the first.
 #
 # Never regenerate one that already exists: rotating JWT_SECRET invalidates
 # every token the KB has issued, which strands logged-in clients and leaves
@@ -31,8 +29,29 @@ ensure_secret() {
     echo "Generated ${name} → $ENV_FILE"
   fi
 }
-ensure_secret SEMIONT_WORKER_SECRET
 ensure_secret JWT_SECRET
+
+# The Semiont launcher. Every `semiont` verb — useradd included — runs HERE
+# when the codespace is the stack's host, so the realm's admin credential stays
+# in this machine's environment and never crosses a wire.
+#
+# The release archive rather than the Homebrew tap: brew on a devcontainer
+# base image is a multi-minute install for one static binary.
+install_launcher() {
+  command -v semiont >/dev/null && return 0
+  local ver arch
+  ver="$(curl -fsSL https://api.github.com/repos/The-AI-Alliance/semiont/releases/latest |
+    grep -m1 '"tag_name"' | cut -d'"' -f4)"
+  ver="${ver#v}"
+  case "$(uname -m)" in
+    aarch64 | arm64) arch=arm64 ;;
+    *) arch=amd64 ;;
+  esac
+  curl -fsSL "https://github.com/The-AI-Alliance/semiont/releases/download/v${ver}/semiont_${ver}_linux_${arch}.tar.gz" |
+    sudo tar xz -C /usr/local/bin semiont
+  echo "Installed semiont ${ver} → /usr/local/bin/semiont"
+}
+install_launcher
 
 COMPOSE_BASE=(--env-file "$ENV_FILE" \
   -f .semiont/compose/backend.yml \

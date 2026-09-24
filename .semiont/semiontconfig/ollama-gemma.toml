@@ -82,6 +82,11 @@ model = "gemma4:e2b"
 type = "ollama"
 model = "gemma4:26b"
 
+[environments.local.identity]
+type = "keycloak"
+issuer = "http://${KEYCLOAK_HOST}:8080/realms/semiont"
+subjectClaim = "sub"
+
 [environments.local.database]
 platform = "external"
 host = "${POSTGRES_HOST}"
