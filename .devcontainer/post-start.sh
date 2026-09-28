@@ -288,7 +288,7 @@ fi
 #
 # The audience must equal the gateway's own byte-for-byte: "https://" + the
 # committed domain with every ":" replaced by "/".
-sed"s|__SEMIONT_AUDIENCE__|https://${KB_DOMAIN_BARE//:/\/}|g" \
+sed "s|__SEMIONT_AUDIENCE__|https://${KB_DOMAIN_BARE//:/\/}|g" \
   .semiont/compose/keycloak-realm.json > .devcontainer/.staged-realm.json
 
 echo "Starting Keycloak..."
