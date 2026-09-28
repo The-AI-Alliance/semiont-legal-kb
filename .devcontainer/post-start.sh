@@ -208,6 +208,38 @@ if [[ "$EMBED_TYPE" == "ollama" ]]; then
   fi
 fi
 
+# ── Identity: import the realm, then let the launcher fill it in ───────────
+#
+# The committed realm carries realm settings and the two PUBLIC clients only,
+# which `semiont identity sync` will not invent. Sync creates the seven
+# service-account clients itself, each with the secret post-create.sh wrote to
+# .env — an exported value wins over one it would generate.
+#
+# The audience must equal the gateway's own byte-for-byte: "https://" + the
+# committed domain with every ":" replaced by "/".
+KB_DOMAIN_BARE=$(unquote "$KB_DOMAIN")
+if [[ -z "$KB_DOMAIN_BARE" ]]; then
+  echo "ERROR: .semiont/config declares no [site] domain — the token audience derives from it."
+  exit 1
+fi
+sed "s|__SEMIONT_AUDIENCE__|https://${KB_DOMAIN_BARE//:/\/}|g" \
+  .semiont/compose/keycloak-realm.json > .devcontainer/.staged-realm.json
+
+echo "Starting Keycloak..."
+docker compose "${COMPOSE_FILES[@]}" up -d --wait --wait-timeout 300 keycloak
+
+# Compose's gate is port-open, which Keycloak passes before the import lands.
+for i in $(seq 1 60); do
+  curl -fsS http://localhost:8080/realms/semiont/.well-known/openid-configuration >/dev/null 2>&1 && break
+  if [[ $i -eq 60 ]]; then
+    echo "ERROR: realm 'semiont' never answered on :8080 — see: docker compose logs keycloak"
+    exit 1
+  fi
+  sleep 2
+done
+
+semiont identity sync --config "$(basename "$SOURCE_CONFIG_REL" .toml)"
+
 # Services that mount the staged config. The browser has no config mount, and
 # the infra services are not ours to churn, so neither is listed.
 STAGED_CONSUMERS=(gateway archivist librarian worker smelter weaver)

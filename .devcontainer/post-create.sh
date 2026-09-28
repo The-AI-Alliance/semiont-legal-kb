@@ -30,6 +30,13 @@ ensure_secret() {
   fi
 }
 ensure_secret JWT_SECRET
+ensure_secret KC_BOOTSTRAP_ADMIN_PASSWORD
+# One credential per service, never shared: a shared one would let any service
+# mint another's identity. `semiont identity sync` gives each Keycloak client
+# the value set here — an exported value wins over one it would generate.
+for svc in archivist dispatcher gateway librarian smelter weaver worker; do
+  ensure_secret "SEMIONT_OIDC_CLIENT_SECRET_$(echo "$svc" | tr '[:lower:]' '[:upper:]')"
+done
 
 # The Semiont launcher. Every `semiont` verb — useradd included — runs HERE
 # when the codespace is the stack's host, so the realm's admin credential stays
