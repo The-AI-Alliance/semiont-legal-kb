@@ -241,7 +241,9 @@ services:
     volumes:
       # NO /kb mount: exactly one container touches the knowledge base tree and
       # it is the archivist (SINGLE-KB-MOUNT). The gateway is not the byte path.
-      - ${SEMIONT_CONFIG:-../semiontconfig/ollama-gemma.toml}:/home/semiont/.semiontconfig:ro
+      # It reads no TOML: its config is the resolved JSON document post-start.sh
+      # renders from the selected semiontconfig.
+      - ../../.devcontainer/.staged-gateway.json:/home/semiont/.semiontconfig:ro
       - semiont_state:/semiont-state
     environment:
       ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
