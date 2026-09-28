@@ -57,27 +57,28 @@ WARNING: ANTHROPIC_API_KEY is not set.
 EOF
 fi
 
-# ── Stage the KB's committed identity into the config the containers read ────
+# ── Stage the configs the containers read ────────────────────────────────────
 #
-# The gateway no longer mounts the knowledge base (SINGLE-KB-MOUNT), so it
-# cannot read `.semiont/config` for itself. It needs the identity to arrive in
-# the environment config: either a `[site]` section or a `[kb]` stanza. On the
-# local path `semiont start` appends that stanza when it stages a per-service
-# copy; compose bind-mounts the committed TOML straight through, so without
-# this step the gateway refuses to boot on a missing `site.domain`.
+# Only the archivist mounts the knowledge base (SINGLE-KB-MOUNT), so the other
+# services cannot read `.semiont/config` for themselves. The sidecars take its
+# identity from a `[kb]` stanza appended to the environment TOML; the gateway
+# reads no TOML at all, only its resolved JSON document. `semiont start` stages
+# both; compose bind-mounts, so this script stages them instead.
 #
 # `.semiont/config` stays the single source of that identity — the domain is
 # NOT duplicated into the semiontconfigs, which would be one fact in two files
 # with nothing keeping them equal.
 STAGED_CONFIG=".devcontainer/.staged-config.toml"
+STAGED_GATEWAY=".devcontainer/.staged-gateway.json"
 # Checksum before regenerating: compose recreates a container when its
 # config DECLARATION changes, and the bind-mount path never does — only
 # these bytes. Without an explicit recreate, a corrected config is written
 # and then ignored by the containers already mounting it, which reads
 # exactly like the fix not working.
+staged_sum() { cat "$STAGED_CONFIG" "$STAGED_GATEWAY" | sha256sum | cut -d" " -f1; }
 STAGED_PREV_SUM=""
-if [[ -f "$STAGED_CONFIG" ]]; then
-  STAGED_PREV_SUM=$(sha256sum "$STAGED_CONFIG" | cut -d" " -f1)
+if [[ -f "$STAGED_CONFIG" && -f "$STAGED_GATEWAY" ]]; then
+  STAGED_PREV_SUM=$(staged_sum)
 fi
 SOURCE_CONFIG_REL="${SEMIONT_CONFIG:-../semiontconfig/ollama-gemma.toml}"
 SOURCE_CONFIG=".semiont/compose/${SOURCE_CONFIG_REL}"
@@ -112,7 +113,11 @@ if [[ -z "$KB_ENV" ]]; then KB_ENV="local"; fi
 
 KB_NAME=$(toml_value project name .semiont/config)
 KB_DOMAIN=$(toml_value site domain .semiont/config)
-KB_OAUTH=$(toml_value site oauthAllowedDomains .semiont/config)
+KB_DOMAIN_BARE=$(unquote "$KB_DOMAIN")
+if [[ -z "$KB_DOMAIN_BARE" ]]; then
+  echo "ERROR: .semiont/config declares no [site] domain — the gateway's identity and the token audience derive from it."
+  exit 1
+fi
 
 {
   cat "$SOURCE_CONFIG"
@@ -125,12 +130,10 @@ KB_OAUTH=$(toml_value site oauthAllowedDomains .semiont/config)
   # error, not an override.
   if ! grep -q "^\[kb\]" "$SOURCE_CONFIG"; then
     echo "[kb]"
-    # Declared-or-omitted, matching the launcher: a KB that declares no domain
-    # or no sign-in policy still meets the gateway's refusal rather than
-    # inheriting a fabricated one.
-    if [[ -n "$KB_NAME" ]];   then echo "name = $KB_NAME"; fi
-    if [[ -n "$KB_DOMAIN" ]]; then echo "domain = $KB_DOMAIN"; fi
-    if [[ -n "$KB_OAUTH" ]];  then echo "oauthAllowedDomains = $KB_OAUTH"; fi
+    # Declared-or-omitted, matching the launcher: a KB that declares no name
+    # meets the librarian's refusal rather than inheriting a fabricated one.
+    if [[ -n "$KB_NAME" ]]; then echo "name = $KB_NAME"; fi
+    echo "domain = $KB_DOMAIN"
   fi
 
   # Where THIS stack's archivist listens. gateway, worker, smelter and the
@@ -159,6 +162,74 @@ COMPOSE_FILES=(--env-file "$ENV_FILE" \
   -f .semiont/compose/backend.yml \
   -f .devcontainer/docker-compose.codespaces.yml)
 
+# A setting of the selected environment, unquoted; "" names its own table.
+env_setting() { unquote "$(toml_value "environments.${KB_ENV}${1:+.$1}" "$2" "$STAGED_CONFIG")"; }
+
+# ── The gateway's resolved document ─────────────────────────────────────────
+#
+# What `semiont start` writes (gatewayDocument, apps/launcher gatewaydoc.go):
+# the same inputs and the same absent-section rules. Every ${VAR} resolves
+# against the environment compose declares for the gateway — a set variable
+# wins even when empty, else the default, else a refusal. Written before the
+# first command that mounts it: a missing bind source comes up as a directory.
+docker compose "${COMPOSE_FILES[@]}" config --format json | jq \
+  --arg config        "$SOURCE_CONFIG" \
+  --arg name          "$(unquote "$KB_NAME")" \
+  --arg domain        "$KB_DOMAIN_BARE" \
+  --arg port          "$(env_setting gateway port)" \
+  --arg publicUrl     "$(env_setting gateway publicURL)" \
+  --arg issuer        "$(env_setting identity issuer)" \
+  --arg subjectClaim  "$(env_setting identity subjectClaim)" \
+  --arg archivistHost "$(env_setting archivist host)" \
+  --arg archivistPort "$(env_setting archivist port)" \
+  --arg signalType    "$(env_setting signal type)" \
+  --arg servers       "$(env_setting signal servers)" \
+  --arg user          "$(env_setting signal user)" \
+  --arg password      "$(env_setting signal password)" \
+  --arg logLevel      "$(env_setting "" logLevel)" \
+  '.services.gateway.environment as $vars
+  | (.services.gateway.mem_limit | tonumber) as $memory
+  | def required($field):
+      if . == "" then error("\($field) is not set in \($config)") else . end;
+    def resolve($field):
+      gsub("\\$\\{(?<ref>[^}]+)\\}";
+        (.ref | index(":-")) as $i
+        | (if $i then .ref[:$i] else .ref end) as $name
+        | if $vars | has($name) then $vars[$name]
+          elif $i then .ref[$i + 2:]
+          else error("\($field) references ${\($name)}, which the gateway service does not set") end);
+    # A credential is only ever named: the document carries no secret value.
+    def secret_ref($key; $field):
+      if . == "" then {}
+      else {($key): ((capture("^\\$\\{(?<name>[A-Z_][A-Z0-9_]*)\\}$") | .name)
+        // error("\($field) must be a ${VAR} reference — set the value in the environment"))} end;
+    {
+      kb: {name: $name, domain: $domain},
+      port: ($port | required("gateway.port") | tonumber),
+      publicUrl: (if $publicUrl == "" then "http://localhost:\($port)" else $publicUrl end
+        | resolve("gateway.publicURL")),
+      identity: {
+        issuer: ($issuer | required("identity.issuer") | resolve("identity.issuer")),
+        subjectClaim: $subjectClaim
+      },
+      archivist: {
+        host: ($archivistHost | resolve("archivist.host")),
+        port: ($archivistPort | required("archivist.port") | tonumber)
+      },
+      signal: (if $signalType == "nats"
+        then {type: "nats", servers: ($servers | resolve("signal.servers"))}
+          + ($user | secret_ref("userEnv"; "signal.user"))
+          + ($password | secret_ref("passwordEnv"; "signal.password"))
+        else {type: "in-process"} end),
+      logLevel: (if $logLevel == "" then "info" else $logLevel end),
+      logFormat: "json",
+      # Half the container memory for queued stream bytes, the other half at
+      # connectionAllowance (gatewaydoc.go: 20 KiB) per open connection.
+      capacity: {queuedBytes: ($memory / 2 | floor), connections: ($memory / 2 / 20480 | floor)}
+    }' > "$STAGED_GATEWAY"
+
+echo "Staged the gateway's resolved document → $STAGED_GATEWAY"
+
 # ── Make the shared state volume writable by the container user ─────────────
 #
 # gateway, archivist and librarian share one state volume: the job queue is
@@ -186,8 +257,8 @@ docker compose "${COMPOSE_FILES[@]}" run --rm --no-deps --user root \
 #
 # The model name comes from [environments.<env>.embedding]; a copy here would
 # be one fact in two files.
-EMBED_TYPE=$(unquote "$(toml_value "environments.${KB_ENV}.embedding" type "$SOURCE_CONFIG")")
-EMBED_MODEL=$(unquote "$(toml_value "environments.${KB_ENV}.embedding" model "$SOURCE_CONFIG")")
+EMBED_TYPE=$(env_setting embedding type)
+EMBED_MODEL=$(env_setting embedding model)
 
 if [[ "$EMBED_TYPE" == "ollama" ]]; then
   if [[ -z "$EMBED_MODEL" ]]; then
@@ -217,12 +288,7 @@ fi
 #
 # The audience must equal the gateway's own byte-for-byte: "https://" + the
 # committed domain with every ":" replaced by "/".
-KB_DOMAIN_BARE=$(unquote "$KB_DOMAIN")
-if [[ -z "$KB_DOMAIN_BARE" ]]; then
-  echo "ERROR: .semiont/config declares no [site] domain — the token audience derives from it."
-  exit 1
-fi
-sed "s|__SEMIONT_AUDIENCE__|https://${KB_DOMAIN_BARE//:/\/}|g" \
+sed"s|__SEMIONT_AUDIENCE__|https://${KB_DOMAIN_BARE//:/\/}|g" \
   .semiont/compose/keycloak-realm.json > .devcontainer/.staged-realm.json
 
 echo "Starting Keycloak..."
@@ -240,12 +306,12 @@ done
 
 semiont identity sync --config "$(basename "$SOURCE_CONFIG_REL" .toml)"
 
-# Services that mount the staged config. The browser has no config mount, and
+# Services that mount a staged config. The browser has no config mount, and
 # the infra services are not ours to churn, so neither is listed.
-STAGED_CONSUMERS=(gateway archivist librarian worker smelter weaver)
+STAGED_CONSUMERS=(gateway archivist dispatcher librarian worker smelter weaver)
 
-if [[ -n "$STAGED_PREV_SUM" ]] && [[ "$STAGED_PREV_SUM" != "$(sha256sum "$STAGED_CONFIG" | cut -d" " -f1)" ]]; then
-  echo "Staged config changed — recreating the services that mount it..."
+if [[ -n "$STAGED_PREV_SUM" ]] && [[ "$STAGED_PREV_SUM" != "$(staged_sum)" ]]; then
+  echo "Staged configs changed — recreating the services that mount them..."
   docker compose "${COMPOSE_FILES[@]}" up -d --no-deps --force-recreate "${STAGED_CONSUMERS[@]}"
 fi
 
