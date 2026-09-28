@@ -40,8 +40,12 @@ ensure_secret JWT_SECRET
 install_launcher() {
   command -v semiont >/dev/null && return 0
   local ver arch
-  ver="$(curl -fsSL https://api.github.com/repos/The-AI-Alliance/semiont/releases/latest |
-    grep -m1 '"tag_name"' | cut -d'"' -f4)"
+  # Capture, then parse. Piping straight into `grep -m1` closes the pipe while
+  # curl is still writing this (large) JSON; curl calls that a write failure and
+  # pipefail makes it the script's exit status — a codespace that never builds.
+  local json
+  json="$(curl -fsSL https://api.github.com/repos/The-AI-Alliance/semiont/releases/latest)"
+  ver="$(printf '%s' "$json" | grep -m1 '"tag_name"' | cut -d'"' -f4)"
   ver="${ver#v}"
   case "$(uname -m)" in
     aarch64 | arm64) arch=arm64 ;;
