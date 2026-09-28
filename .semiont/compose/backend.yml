@@ -117,6 +117,7 @@ services:
       - "5432:5432"
     volumes:
       - semiont_postgres:/var/lib/postgresql/data
+      - ./postgres-init-keycloak.sql:/docker-entrypoint-initdb.d/10-keycloak.sql:ro
     environment:
       # A subdirectory of the mount, not the mount itself: initdb refuses a
       # data directory it does not own outright. Same value the launcher uses.
@@ -147,6 +148,41 @@ services:
       timeout: 3s
       retries: 12
       start_period: 5s
+
+  # The OIDC issuer the gateway trusts. Realm settings and the two PUBLIC
+  # clients are imported from the staged realm; post-start.sh then runs
+  # `semiont identity sync`, which creates the seven service-account clients
+  # and their secrets — those are launcher-owned and never committed.
+  keycloak:
+    container_name: semiont-keycloak
+    image: quay.io/keycloak/keycloak:26.7.4
+    command: ["start-dev", "--import-realm"]
+    ports:
+      - "8080:8080"
+    mem_limit: 1g
+    volumes:
+      # Rendered by post-start.sh: the committed template with this KB's
+      # audience substituted in.
+      - ../../.devcontainer/.staged-realm.json:/opt/keycloak/data/import/semiont.json:ro
+    environment:
+      KC_DB: postgres
+      KC_DB_URL: jdbc:postgresql://postgres:5432/keycloak
+      KC_DB_USERNAME: postgres
+      KC_DB_PASSWORD: localpass
+      KC_BOOTSTRAP_ADMIN_USERNAME: admin
+      KC_BOOTSTRAP_ADMIN_PASSWORD: ${KC_BOOTSTRAP_ADMIN_PASSWORD:?KC_BOOTSTRAP_ADMIN_PASSWORD must be set; post-create.sh generates it per codespace}
+    healthcheck:
+      # This image has bash but no curl/wget/nc. Port-open only: Keycloak binds
+      # 8080 once the server is up. post-start.sh polls the realm's discovery
+      # document before `identity sync`, which is the readiness that matters.
+      test: ["CMD-SHELL", "bash -c 'exec 3<>/dev/tcp/localhost/8080 && exec 3<&-'"]
+      interval: 5s
+      timeout: 3s
+      retries: 24
+      start_period: 15s
+    depends_on:
+      postgres:
+        condition: service_healthy
 
   jaeger:
     container_name: semiont-jaeger
@@ -220,8 +256,13 @@ services:
       # value fails with a fix-it instead of a crash-loop. post-create.sh
       # generates it per codespace; the sidecars do not need it.
       JWT_SECRET: ${JWT_SECRET:?JWT_SECRET must be set (min 32 chars), e.g. export JWT_SECRET=$$(openssl rand -hex 32)}
+      KEYCLOAK_HOST: keycloak
+      SEMIONT_OIDC_CLIENT_ID: semiont-gateway
+      SEMIONT_OIDC_CLIENT_SECRET: ${SEMIONT_OIDC_CLIENT_SECRET_GATEWAY:?post-create.sh generates it per codespace}
       OTEL_EXPORTER_OTLP_ENDPOINT: ${OTEL_EXPORTER_OTLP_ENDPOINT:-}
     depends_on:
+      keycloak:
+        condition: service_healthy
       nats:
         condition: service_healthy
       neo4j:
@@ -257,6 +298,9 @@ services:
       QDRANT_HOST: qdrant
       POSTGRES_HOST: postgres
       NATS_HOST: nats
+      KEYCLOAK_HOST: keycloak
+      SEMIONT_OIDC_CLIENT_ID: semiont-archivist
+      SEMIONT_OIDC_CLIENT_SECRET: ${SEMIONT_OIDC_CLIENT_SECRET_ARCHIVIST:?post-create.sh generates it per codespace}
       OTEL_EXPORTER_OTLP_ENDPOINT: ${OTEL_EXPORTER_OTLP_ENDPOINT:-}
     depends_on:
       gateway:
@@ -283,6 +327,9 @@ services:
       QDRANT_HOST: qdrant
       POSTGRES_HOST: postgres
       NATS_HOST: nats
+      KEYCLOAK_HOST: keycloak
+      SEMIONT_OIDC_CLIENT_ID: semiont-librarian
+      SEMIONT_OIDC_CLIENT_SECRET: ${SEMIONT_OIDC_CLIENT_SECRET_LIBRARIAN:?post-create.sh generates it per codespace}
       OTEL_EXPORTER_OTLP_ENDPOINT: ${OTEL_EXPORTER_OTLP_ENDPOINT:-}
     depends_on:
       gateway:
@@ -305,6 +352,9 @@ services:
       QDRANT_HOST: qdrant
       POSTGRES_HOST: postgres
       NATS_HOST: nats
+      KEYCLOAK_HOST: keycloak
+      SEMIONT_OIDC_CLIENT_ID: semiont-worker
+      SEMIONT_OIDC_CLIENT_SECRET: ${SEMIONT_OIDC_CLIENT_SECRET_WORKER:?post-create.sh generates it per codespace}
       OTEL_EXPORTER_OTLP_ENDPOINT: ${OTEL_EXPORTER_OTLP_ENDPOINT:-}
     depends_on:
       gateway:
@@ -330,6 +380,9 @@ services:
       NEO4J_HOST: neo4j
       POSTGRES_HOST: postgres
       NATS_HOST: nats
+      KEYCLOAK_HOST: keycloak
+      SEMIONT_OIDC_CLIENT_ID: semiont-smelter
+      SEMIONT_OIDC_CLIENT_SECRET: ${SEMIONT_OIDC_CLIENT_SECRET_SMELTER:?post-create.sh generates it per codespace}
       OTEL_EXPORTER_OTLP_ENDPOINT: ${OTEL_EXPORTER_OTLP_ENDPOINT:-}
     depends_on:
       gateway:
@@ -355,6 +408,9 @@ services:
       NEO4J_HOST: neo4j
       POSTGRES_HOST: postgres
       NATS_HOST: nats
+      KEYCLOAK_HOST: keycloak
+      SEMIONT_OIDC_CLIENT_ID: semiont-weaver
+      SEMIONT_OIDC_CLIENT_SECRET: ${SEMIONT_OIDC_CLIENT_SECRET_WEAVER:?post-create.sh generates it per codespace}
       OTEL_EXPORTER_OTLP_ENDPOINT: ${OTEL_EXPORTER_OTLP_ENDPOINT:-}
     depends_on:
       gateway:
@@ -378,6 +434,9 @@ services:
       NEO4J_HOST: neo4j
       POSTGRES_HOST: postgres
       NATS_HOST: nats
+      KEYCLOAK_HOST: keycloak
+      SEMIONT_OIDC_CLIENT_ID: semiont-dispatcher
+      SEMIONT_OIDC_CLIENT_SECRET: ${SEMIONT_OIDC_CLIENT_SECRET_DISPATCHER:?post-create.sh generates it per codespace}
       OTEL_EXPORTER_OTLP_ENDPOINT: ${OTEL_EXPORTER_OTLP_ENDPOINT:-}
     depends_on:
       gateway:
