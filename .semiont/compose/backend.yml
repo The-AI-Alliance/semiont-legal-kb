@@ -240,9 +240,8 @@ services:
     image: ghcr.io/the-ai-alliance/semiont-gateway:${SEMIONT_VERSION:-latest}
     ports:
       - "4000:4000"
-    # 2g, as the launcher runs it: the gateway hosts no actors and mounts no
-    # knowledge base, so the 8g it carried when it held both is no longer what
-    # it needs.
+    # 2g, as the launcher runs it. post-start.sh derives the gateway's capacity
+    # from this limit.
     mem_limit: 2g
     volumes:
       # NO /kb mount: exactly one container touches the knowledge base tree and
@@ -250,24 +249,22 @@ services:
       # It reads no TOML: its config is the resolved JSON document post-start.sh
       # renders from the selected semiontconfig.
       - ../../.devcontainer/.staged-gateway.json:/home/semiont/.semiontconfig:ro
+      # Only the supervisor's events log; the gateway itself writes nothing.
       - semiont_state:/semiont-state
     environment:
-      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
-      XDG_STATE_HOME: /semiont-state
-      POSTGRES_HOST: postgres
-      NATS_HOST: nats
-      NEO4J_HOST: neo4j
-      QDRANT_HOST: qdrant
-      OLLAMA_HOST: ollama
-      # Required by the gateway: it refuses to boot without one
-      # (requireJwtSecret in apps/gateway/src/auth/jwt.ts). Guarded so a missing
-      # value fails with a fix-it instead of a crash-loop. post-create.sh
+      # Required by the gateway: it refuses to boot without one. Guarded so a
+      # missing value fails with a fix-it instead of a crash-loop. post-create.sh
       # generates it per codespace; the sidecars do not need it.
       JWT_SECRET: ${JWT_SECRET:?JWT_SECRET must be set (min 32 chars), e.g. export JWT_SECRET=$$(openssl rand -hex 32)}
-      KEYCLOAK_HOST: keycloak.localhost
       SEMIONT_OIDC_CLIENT_ID: semiont-gateway
       SEMIONT_OIDC_CLIENT_SECRET: ${SEMIONT_OIDC_CLIENT_SECRET_GATEWAY:?post-create.sh generates it per codespace}
       OTEL_EXPORTER_OTLP_ENDPOINT: ${OTEL_EXPORTER_OTLP_ENDPOINT:-}
+      # Not read by the gateway: post-start.sh resolves its document's issuer and
+      # signal servers against these.
+      KEYCLOAK_HOST: keycloak.localhost
+      NATS_HOST: nats
+    # keycloak and nats are the gateway's. The rest gate the sidecars, which all
+    # wait on a healthy gateway.
     depends_on:
       keycloak:
         condition: service_healthy
