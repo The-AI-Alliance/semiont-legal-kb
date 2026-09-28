@@ -232,15 +232,15 @@ echo "Staged the gateway's resolved document → $STAGED_GATEWAY"
 
 # ── Make the shared state volume writable by the container user ─────────────
 #
-# gateway, archivist and librarian share one state volume: the job queue is
-# filesystem-backed, so all three must read and write the same directory.
+# The archivist writes its projections to one state volume (XDG_STATE_HOME)
+# and the librarian reads them there; the gateway's supervisor keeps its
+# events log there too.
 #
 # The images run as `semiont` (uid 1001) and pre-create `/kb`, but not
 # `/semiont-state`. Docker seeds a fresh named volume from the image at that
 # path — and when the image has nothing there, the volume is created
-# root-owned, so uid 1001 cannot mkdir inside it and the gateway dies with
-# EACCES before it can serve anything. `semiont start` never hits this: it
-# bind-mounts a host directory it created itself.
+# root-owned, so uid 1001 cannot write the projections. `semiont start` never
+# hits this: it bind-mounts a host directory it created itself.
 #
 # One root-run chown fixes the volume for good; it is idempotent, and cheap
 # once the volume already has the right owner. --no-deps keeps it from
