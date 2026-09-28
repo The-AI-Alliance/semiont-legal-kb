@@ -76,7 +76,7 @@ Open **http://localhost:3000** and add the KB in the **Knowledge Bases** panel, 
 
 ```bash
 gh codespace create --repo The-AI-Alliance/semiont-legal-kb --machine premiumLinux
-gh codespace ports forward 3000:3000 4000:4000   # leave running
+gh codespace ports forward 3000:3000 4000:4000 8080:8080   # leave running
 
 # In another terminal, create the first admin (nothing creates one for you).
 # --generate-password prints a random password once; there is no --password flag:

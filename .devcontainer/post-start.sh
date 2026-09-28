@@ -328,13 +328,14 @@ if $COMPOSE_OK; then
 Semiont stack is up.
   Semiont Browser → port 3000  (forwarded by Codespaces)
   Gateway API     → port 4000  (forwarded by Codespaces)
+  Keycloak        → port 8080  (sign-in; the browser is sent to keycloak.localhost:8080)
   Jaeger UI       → port 16686  (traces)
   Prometheus      → port 9090   (metrics; scrapes the collector)
   Collector       → port 24110  (raw /metrics readout)
   Neo4j Browser   → port 7474   (login: neo4j / localpass)
 
-To use it from your machine, forward both ports:
-  gh codespace ports forward 3000:3000 4000:4000
+To use it from your machine, forward all three ports:
+  gh codespace ports forward 3000:3000 4000:4000 8080:8080
 then open http://localhost:3000 and sign in as the admin you create below.
 
 EOF
