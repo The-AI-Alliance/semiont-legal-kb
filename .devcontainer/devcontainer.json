@@ -29,10 +29,11 @@
   "postCreateCommand": ".devcontainer/post-create.sh",
   "postStartCommand": ".devcontainer/post-start.sh",
 
-  "forwardPorts": [3000, 4000, 16686, 9090, 24110, 7474, 24100, 24101, 24102],
+  "forwardPorts": [3000, 4000, 8080, 16686, 9090, 24110, 7474, 24100, 24101, 24102],
   "portsAttributes": {
     "3000": { "label": "Semiont Browser", "onAutoForward": "notify" },
     "4000": { "label": "Gateway API", "onAutoForward": "notify" },
+    "8080": { "label": "Keycloak", "onAutoForward": "silent" },
     "16686": { "label": "Jaeger UI", "onAutoForward": "notify" },
     "9090": { "label": "Prometheus", "onAutoForward": "notify" },
     "24110": { "label": "Collector metrics", "onAutoForward": "silent" },
