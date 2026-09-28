@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-# Runs on every Codespace start (creation and resume). Brings up the stack
-# via backend.yml + the Codespace overrides + the observe profile.
+# Runs on every Codespace start (creation and resume). Brings up the stack in
+# .semiont/compose/backend.yml with the observe profile.
 
 cd "$(git rev-parse --show-toplevel)"
 
@@ -158,9 +158,7 @@ echo "Staged $SOURCE_CONFIG + [kb] identity → $STAGED_CONFIG"
 # directory (.semiont/compose), which is how compose resolves these paths.
 export SEMIONT_CONFIG="../../${STAGED_CONFIG}"
 
-COMPOSE_FILES=(--env-file "$ENV_FILE" \
-  -f .semiont/compose/backend.yml \
-  -f .devcontainer/docker-compose.codespaces.yml)
+COMPOSE_FILES=(--env-file "$ENV_FILE" -f .semiont/compose/backend.yml)
 
 # A setting of the selected environment, unquoted; "" names its own table.
 env_setting() { unquote "$(toml_value "environments.${KB_ENV}${1:+.$1}" "$2" "$STAGED_CONFIG")"; }
