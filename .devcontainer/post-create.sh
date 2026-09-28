@@ -64,12 +64,9 @@ install_launcher() {
 }
 install_launcher
 
-COMPOSE_BASE=(--env-file "$ENV_FILE" \
-  -f .semiont/compose/backend.yml \
-  -f .devcontainer/docker-compose.codespaces.yml)
+COMPOSE_BASE=(--env-file "$ENV_FILE" -f .semiont/compose/backend.yml)
 
-# Pull all images — the five published Semiont images plus the infra
-# (neo4j, qdrant, postgres, ollama, jaeger).
+# Pull every image the stack runs, the observe profile included.
 docker compose "${COMPOSE_BASE[@]}" --profile observe pull
 
 # Make .devcontainer/.env auto-sourced in interactive shells so the user can

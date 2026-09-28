@@ -1,54 +1,27 @@
-# Semiont stack — gateway, archivist, librarian, worker pool, smelter, weaver,
-# and browser (http://localhost:3000), plus Neo4j, Qdrant, Ollama, and
-# PostgreSQL. Under `--profile observe` it also runs the telemetry trio:
-# an OTel collector (every service's export target), Prometheus (scrapes the
-# collector's readout on 24110), and Jaeger (traces). Equivalent end state to `semiont start` (the Semiont launcher).
+# The codespace stack. post-create.sh pulls its images; post-start.sh stages
+# what it mounts (the gateway's JSON document, the TOML the sidecars read, the
+# Keycloak realm) and runs it with the secrets post-create.sh writes to
+# .devcontainer/.env. It does not run on its own; a local stack is
+# `semiont start`.
 #
-# The gateway holds identity, the wire, bytes, and the job queue; it hosts no
-# actors. The ARCHIVIST owns the record (Stower accessions it, Browser serves
-# browse:* from the projections) and is the ONLY container that mounts the
-# knowledge base. The LIBRARIAN owns the two LLM-bound actors, gather and
-# search. Keep this file's service set in step with the launcher's roles table
-# — they decide the same thing in two places, and nothing fails when they drift.
+# Semiont: gateway, archivist, librarian, dispatcher, worker, smelter, weaver
+# and browser, from GHCR at ${SEMIONT_VERSION:-latest}. Infrastructure: Neo4j,
+# Qdrant, Ollama, PostgreSQL, NATS and Keycloak. The `observe` profile adds the
+# telemetry trio: an OTel collector (every service's export target),
+# Prometheus (scrapes the collector's readout on 24110) and Jaeger (traces).
 #
-# The seven service images are pulled from GHCR (they ship config-free); the
-# selected config TOML is bind-mounted at runtime. Set SEMIONT_VERSION to choose
-# an image tag (default: latest). NOTE: relative paths in this file resolve
-# against the compose file's directory (.semiont/compose), so SEMIONT_CONFIG is
-# given relative to that.
+# The launcher's roles table decides the same services, images and memory
+# limits, and nothing fails when the two drift: keep them in step by hand.
+# Memory follows the launcher except ollama, and is sized for the 8-core /
+# 32GB machine `semiont start --runtime codespace` requests.
 #
-# Quick start (ollama-gemma, the default):
+# Relative paths resolve against this file's directory (.semiont/compose).
 #
-#   docker compose -f .semiont/compose/backend.yml up
-#   docker compose -f .semiont/compose/backend.yml exec ollama ollama pull nomic-embed-text
-#   docker compose -f .semiont/compose/backend.yml exec ollama ollama pull gemma4:26b
-#   docker compose -f .semiont/compose/backend.yml exec ollama ollama pull gemma4:e2b
-#
-# Anthropic config (faster, cloud inference):
-#
-#   export ANTHROPIC_API_KEY=<your-key>
-#   export SEMIONT_CONFIG=../semiontconfig/anthropic.toml
-#   docker compose -f .semiont/compose/backend.yml up
-#
-# No account is created by bringing the stack up. Make the first admin with
-# `semiont useradd --email …` — it prompts for the password, and never accepts
-# one as an argument. Add `--repo <owner>/<name>` to target a codespace stack
-# from your own machine.
-#
-# Observability (Jaeger sidecar — UI on http://localhost:16686):
-#   export OTEL_EXPORTER_OTLP_ENDPOINT=http://jaeger:4318
-#   docker compose -f .semiont/compose/backend.yml --profile observe up
-#
-# Pin/refresh the image version (a bare `up` will not re-pull a cached :latest):
-#   export SEMIONT_VERSION=0.5.12
-#   docker compose -f .semiont/compose/backend.yml pull
-#
-# The seven Semiont services carry `restart: on-failure`: any crash is
-# restarted (with engine backoff). This closes a self-healing loop for worker
-# stalls — the worker detects processing with no activity for 15 min and
-# exits(1), compose restarts it, and the gateway's janitor re-queues the held
-# job within 30 min. Infra services deliberately have no restart policy: an
-# infra crash usually wants eyes, not a loop.
+# The Semiont services carry `restart: on-failure`: any crash is restarted,
+# with engine backoff. A worker that makes no progress for 15 min exits(1),
+# compose restarts it, and the dispatcher's stale-job sweep hands the job it
+# held to another worker. Infrastructure has no restart policy: an infra
+# crash usually wants eyes, not a loop.
 #
 # Do NOT set SEMIONT_SUPERVISE. It starts an in-container supervisor that
 # restarts the process itself, so the container never exits and every
@@ -64,6 +37,7 @@ services:
     ports:
       - "7474:7474"
       - "7687:7687"
+    mem_limit: 2g
     volumes:
       - semiont_neo4j_data:/data
       - semiont_neo4j_logs:/logs
@@ -83,6 +57,7 @@ services:
     image: qdrant/qdrant:v1.19.1
     ports:
       - "6333:6333"
+    mem_limit: 2g
     volumes:
       - semiont_qdrant:/qdrant/storage
     healthcheck:
@@ -99,7 +74,10 @@ services:
     image: ollama/ollama
     ports:
       - "11434:11434"
-    mem_limit: 24g
+    # Room for the embedding model only: a codespace runs the anthropic config
+    # (devcontainer.json's SEMIONT_CONFIG). ollama-gemma's inference models need
+    # the launcher's 24g, which this machine cannot give.
+    mem_limit: 4g
     volumes:
       - ollama_models:/root/.ollama
     healthcheck:
@@ -115,6 +93,7 @@ services:
     image: postgres:15.18-alpine
     ports:
       - "5432:5432"
+    mem_limit: 1g
     volumes:
       - semiont_postgres:/var/lib/postgresql/data
       - ./postgres-init-keycloak.sql:/docker-entrypoint-initdb.d/10-keycloak.sql:ro
@@ -138,6 +117,7 @@ services:
     command: ["-js", "-sd", "/data"]
     ports:
       - "4222:4222"
+    mem_limit: 512m
     volumes:
       - semiont_nats:/data
     healthcheck:
@@ -200,6 +180,7 @@ services:
       # over the compose network. (The launcher remaps Jaeger to 14318 instead,
       # because there every container shares one host port space.)
       - "16686:16686"
+    mem_limit: 1g
     healthcheck:
       test: ["CMD", "wget", "-qO-", "http://localhost:16686"]
       interval: 5s
@@ -402,7 +383,7 @@ services:
     image: ghcr.io/the-ai-alliance/semiont-weaver:${SEMIONT_VERSION:-latest}
     ports:
       - "24102:24102"
-    mem_limit: 3g
+    mem_limit: 2g
     volumes:
       - ${SEMIONT_CONFIG:-../semiontconfig/ollama-gemma.toml}:/home/semiont/.semiontconfig:ro
     environment:
