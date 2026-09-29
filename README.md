@@ -51,27 +51,21 @@ This repo follows the same layout and startup flow as [`semiont-template-kb`](ht
 
 > **Before creating:** add `ANTHROPIC_API_KEY` as a [user secret](https://github.com/settings/codespaces) with this repo selected. Otherwise the stack comes up but inference is non-functional until you add the secret and rebuild the container.
 
-One command creates the codespace (or resumes the one you already have), waits for the stack to answer, forwards the KB to your machine, and starts the browser locally when this machine has a container runtime:
+One command creates the codespace (or resumes the one you already have), waits for the stack to answer, forwards the KB and its Keycloak to your machine, and starts the browser locally when this machine has a container runtime:
 
 ```bash
 semiont start --runtime codespace --repo The-AI-Alliance/semiont-legal-kb
 ```
 
-Signing in needs the codespace's Keycloak, which the launcher does not forward. Forward it yourself and leave it running; the start summary names the codespace, and so does `gh codespace list`. Every codespace KB's Keycloak is on 8080, so this machine signs into one codespace KB at a time:
+No account exists until you make one. Create the first one from your machine; it prompts for the password:
 
 ```bash
-gh codespace ports forward 8080:8080 -c <codespace>
+semiont useradd --repo The-AI-Alliance/semiont-legal-kb --email you@example.com
 ```
 
-No account exists until you make one, and `semiont useradd` cannot reach a codespace KB. Create the first account with Keycloak's own admin tool inside the codespace; it prompts for the password:
+Open **http://localhost:3000** and add the KB in the **Knowledge Bases** panel: Host `localhost`, and the KB port the launcher printed. **Connect** sends you to Keycloak; sign in with the email and password you just set, and give your name the first time. Each codespace KB gets its own ports, so several can be signed into at once.
 
-```bash
-gh codespace ssh -c <codespace> -- -t "docker exec -it semiont-keycloak bash -c 'K=/opt/keycloak/bin/kcadm.sh; \$K config credentials --server http://localhost:8080 --realm master --user admin --password \"\$KC_BOOTSTRAP_ADMIN_PASSWORD\" && \$K create users -r semiont -s username=<email> -s email=<email> -s emailVerified=true -s enabled=true && \$K set-password -r semiont --username <email>'"
-```
-
-Open **http://localhost:3000** and add the KB in the **Knowledge Bases** panel: Host `localhost`, and the port the launcher printed. **Connect** sends you to Keycloak; sign in with the email and password you just set, and give your name the first time.
-
-`semiont stop --repo The-AI-Alliance/semiont-legal-kb` stops compute (storage bills until GitHub deletes the codespace, 30 days on); add `--delete` to destroy it now. It leaves your 8080 forward running. A codespace whose setup failed during `start` is unknown to `semiont stop`; delete it with `gh codespace delete -c <codespace>`.
+`semiont stop --repo The-AI-Alliance/semiont-legal-kb` stops compute and both forwards (storage bills until GitHub deletes the codespace, 30 days on); add `--delete` to destroy it now. It finds the codespace even when this machine has no record of it.
 
 <details>
 <summary>Without the launcher: the raw <code>gh</code> recipe</summary>
@@ -81,7 +75,13 @@ gh codespace create --repo The-AI-Alliance/semiont-legal-kb --machine premiumLin
 gh codespace ports forward 3000:3000 4000:4000 8080:8080 -c <codespace>   # leave running
 ```
 
-In another terminal, create the first account with the Keycloak command above. This forwards the codespace's own browser as well: open **http://localhost:3000**, add Host `localhost`, Port `4000`, and **Connect**. If `gh` rejects the forward with `must have admin rights to Repository`, grant the scope once: `gh auth refresh -h github.com -s codespace`.
+The codespace brings the stack up by itself. In another terminal, create the first account inside it; it prompts for the password:
+
+```bash
+gh codespace ssh -c <codespace> -- -t 'cd /workspaces/* && semiont useradd --email you@example.com'
+```
+
+This forwards the codespace's own browser as well: open **http://localhost:3000**, add Host `localhost`, Port `4000`, and **Connect**. If `gh` rejects the forward with `must have admin rights to Repository`, grant the scope once: `gh auth refresh -h github.com -s codespace`.
 
 </details>
 

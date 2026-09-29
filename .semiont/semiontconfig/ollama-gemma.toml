@@ -84,7 +84,7 @@ model = "gemma4:26b"
 
 [environments.local.identity]
 type = "keycloak"
-issuer = "http://${KEYCLOAK_HOST}:8080/realms/semiont"
+issuer = "http://${KEYCLOAK_HOST}:${KEYCLOAK_PORT}/realms/semiont"
 subjectClaim = "sub"
 
 [environments.local.database]

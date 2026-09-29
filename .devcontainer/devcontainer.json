@@ -8,12 +8,12 @@
     // Required for `gh codespace ssh` / `gh codespace cp`: the base image
     // ships no SSH server (unlike GitHub's default Codespaces image), and
     // without one every CLI route into the codespace fails — including
-    // `semiont useradd --repo …`, which reaches the gateway container over
-    // ssh to create the first admin.
+    // `semiont useradd --repo …`, which runs the codespace's own launcher
+    // over ssh to create the first admin.
     "ghcr.io/devcontainers/features/sshd:1": {}
   },
 
-  // The machine backend.yml's memory limits are sized for, and the one
+  // The machine the launcher's memory table is sized for, and the one
   // `semiont start --runtime codespace` requests (premiumLinux).
   "hostRequirements": {
     "cpus": 8,
@@ -21,28 +21,19 @@
   },
 
   "containerEnv": {
-    // Bind-mount source for compose; resolved relative to the compose project
-    // dir (.semiont/compose/), NOT the repo root.
-    "SEMIONT_CONFIG": "../semiontconfig/anthropic.toml",
-    "OTEL_EXPORTER_OTLP_ENDPOINT": "http://collector:4318",
     "ANTHROPIC_API_KEY": "${localEnv:ANTHROPIC_API_KEY}"
   },
 
-  "postCreateCommand": ".devcontainer/post-create.sh",
   "postStartCommand": ".devcontainer/post-start.sh",
 
-  "forwardPorts": [3000, 4000, 8080, 16686, 9090, 24110, 7474, 24100, 24101, 24102],
+  "forwardPorts": [3000, 4000, 8080, 16686, 9090, 7474],
   "portsAttributes": {
     "3000": { "label": "Semiont Browser", "onAutoForward": "notify" },
     "4000": { "label": "Gateway API", "onAutoForward": "notify" },
     "8080": { "label": "Keycloak", "onAutoForward": "silent" },
     "16686": { "label": "Jaeger UI", "onAutoForward": "notify" },
     "9090": { "label": "Prometheus", "onAutoForward": "notify" },
-    "24110": { "label": "Collector metrics", "onAutoForward": "silent" },
-    "7474": { "label": "Neo4j Browser", "onAutoForward": "silent" },
-    "24100": { "label": "Worker health", "onAutoForward": "silent" },
-    "24101": { "label": "Smelter health", "onAutoForward": "silent" },
-    "24102": { "label": "Weaver health", "onAutoForward": "silent" }
+    "7474": { "label": "Neo4j Browser", "onAutoForward": "silent" }
   },
 
   "customizations": {
