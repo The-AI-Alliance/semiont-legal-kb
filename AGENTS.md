@@ -94,7 +94,13 @@ Flags: `--config anthropic` for cloud inference (requires `ANTHROPIC_API_KEY`), 
 
 ### Codespaces
 
-Open the repo in a Codespace — `post-create.sh` pulls the stack's images, `post-start.sh` brings it up. No account is created — make the first admin with `docker compose -f .semiont/compose/backend.yml exec gateway semiont-useradd --email you@example.com --generate-password --admin`. Forward the port: `gh codespace ports forward 4000:4000`.
+From your machine, `semiont start --runtime codespace --repo The-AI-Alliance/semiont-legal-kb` creates or resumes the codespace, waits for the stack (which the codespace's own launcher runs), and forwards the KB (4000) and its Keycloak (8080), or the next free ports it prints. No account is created — make the first one; it prompts for the password:
+
+```bash
+semiont useradd --repo The-AI-Alliance/semiont-legal-kb --email you@example.com
+```
+
+`semiont stop --repo The-AI-Alliance/semiont-legal-kb` stops the codespace; add `--delete` to destroy it.
 
 ## Parameterization and interactivity
 
