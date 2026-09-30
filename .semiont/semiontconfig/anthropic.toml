@@ -24,7 +24,6 @@ type = "neo4j"
 name = "neo4j"
 uri = "bolt://${NEO4J_HOST}:7687"
 username = "neo4j"
-password = "localpass"
 database = "neo4j"
 
 [environments.local.vectors]
@@ -94,4 +93,3 @@ host = "${POSTGRES_HOST}"
 port = 5432
 name = "semiont"
 user = "postgres"
-password = "localpass"
