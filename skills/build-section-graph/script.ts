@@ -9,10 +9,9 @@
 import {
   SemiontSession,
   InMemorySessionStorage,
-  type KbTarget,
+  httpKb,
   resourceId as ridBrand,
   type AnnotationId,
-  type GatheredContext,
   type ResourceId,
 } from '@semiont/sdk';
 import { splitMarkdownSections } from '../../src/sections.js';
@@ -42,17 +41,21 @@ async function main(): Promise<void> {
   }
   const contractId = ridBrand(contractIdArg);
 
-  const baseUrl = process.env.SEMIONT_API_URL ?? 'http://localhost:4000';
-  const email = process.env.SEMIONT_USER_EMAIL!;
-  const password = process.env.SEMIONT_USER_PASSWORD!;
-  const u = new URL(baseUrl);
-  const kb: KbTarget = {
-    id: 'legal-build-section-graph',
-    label: 'legal build-section-graph',
-    email,
-    endpoint: { kind: 'http', host: u.hostname, port: Number(u.port) || 4000, protocol: u.protocol.replace(':', '') as 'http' | 'https' },
-  };
-  const session = await SemiontSession.signInHttp({ kb, storage: new InMemorySessionStorage(), baseUrl, email, password });
+  const gateway = new URL(process.env.SEMIONT_API_URL ?? 'http://localhost:4000');
+  const session = await SemiontSession.signInDevice({
+    kb: httpKb({
+      id: 'legal-build-section-graph',
+      label: 'legal build-section-graph',
+      host: gateway.hostname,
+      port: Number(gateway.port) || 4000,
+      protocol: gateway.protocol === 'https:' ? 'https' : 'http',
+    }),
+    storage: new InMemorySessionStorage(),
+    onCode: ({ verificationUri, verificationUriComplete, userCode }) => {
+      console.error(`Approve this script at ${verificationUriComplete ?? verificationUri}`);
+      if (!verificationUriComplete) console.error(`Code: ${userCode}`);
+    },
+  });
   const semiont = session.client;
 
   try {
@@ -108,7 +111,7 @@ async function main(): Promise<void> {
 
     const sectionAnnotations: SectionAnno[] = [];
     for (const r of markdownResources) {
-      const rId = ridBrand(r['@id']);
+      const rId = r['@id'];
       const annotations = await semiont.browse.annotations(rId).fresh();
       for (const ann of annotations) {
         if (ann.motivation !== 'linking') continue;
@@ -155,9 +158,7 @@ async function main(): Promise<void> {
     let bound = 0;
     let unmatched = 0;
     for (const a of sectionAnnotations) {
-      const gather = await semiont.gather.annotation(a.rId, a.annId, { contextWindow: 1500 });
-      if (!('response' in gather)) continue;
-      const context = gather.response as GatheredContext;
+      const { response: context } = await semiont.gather.annotation(a.rId, a.annId, { contextWindow: 1500 });
       const matchResult = await semiont.match.search(a.rId, a.annId, context, {
         limit: 5,
         useSemanticScoring: true,

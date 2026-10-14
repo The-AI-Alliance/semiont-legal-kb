@@ -10,14 +10,14 @@ You are helping the user surface the language in a contract that needs counsel's
 
 ## What it does
 
-For each markdown corpus resource (or one specific resource), runs `mark.assist({ motivation: 'assessing', instructions: ... })`. Each flagged span is queryable as an annotation; later, `build-due-diligence-checklist` (skill 10) aggregates the corpus's flagged work into a single Checklist resource.
+For each markdown corpus resource (or one specific resource), runs `mark.delegate({ motivation: 'assessing', instructions: ... })`. Each flagged span is queryable as an annotation; later, `build-due-diligence-checklist` (skill 10) aggregates the corpus's flagged work into a single Checklist resource.
 
-PDFs are skipped (mark.assist requires text input).
+PDFs are skipped (mark.delegate requires text input).
 
 ## SDK verbs
 
 - `browse.resources` — find markdown corpus targets
-- `mark.assist({ motivation: 'assessing', instructions: ... })`
+- `mark.delegate({ motivation: 'assessing', instructions: ... })`
 
 ## Parameters
 
@@ -39,11 +39,11 @@ HOST_ADDR=$(container run --rm node:24-alpine sh -c "ip route | awk '/default/{p
 
 container run --rm -v "$(pwd):/work" -w /work \
   -e SEMIONT_API_URL=http://${HOST_ADDR}:4000 \
-  -e SEMIONT_USER_EMAIL=admin@example.com \
-  -e SEMIONT_USER_PASSWORD=<your-password> \
   node:24-alpine \
-  sh -c 'npm install --silent --no-fund @semiont/sdk tsx && npx tsx skills/assess-contract-risks/script.ts'
+  sh -c 'npm ci --no-audit --no-fund && npx tsx skills/assess-contract-risks/script.ts'
 ```
+
+The script prints an address: open it in a browser and approve the sign-in. [Signing in](https://github.com/The-AI-Alliance/semiont/blob/main/docs/builder/SIGN-IN.md) has the other ways a script can sign in.
 
 Override the focus per matter:
 
