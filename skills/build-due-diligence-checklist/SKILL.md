@@ -41,16 +41,16 @@ HOST_ADDR=$(container run --rm node:24-alpine sh -c "ip route | awk '/default/{p
 
 container run --rm -v "$(pwd):/work" -w /work \
   -e SEMIONT_API_URL=http://${HOST_ADDR}:4000 \
-  -e SEMIONT_USER_EMAIL=admin@example.com \
-  -e SEMIONT_USER_PASSWORD=<your-password> \
   node:24-alpine \
-  sh -c 'npm install --silent --no-fund @semiont/sdk tsx && npx tsx skills/build-due-diligence-checklist/script.ts'
+  sh -c 'npm ci --no-audit --no-fund && npx tsx skills/build-due-diligence-checklist/script.ts'
 ```
+
+The script prints an address: open it in a browser and approve the sign-in. [Signing in](https://github.com/The-AI-Alliance/semiont/blob/main/docs/builder/SIGN-IN.md) has the other ways a script can sign in.
 
 Add `-e SEMIONT_INTERACTIVE=1 -it` for the confirm prompt.
 
 ## Guidance for the AI assistant
 
-- **The checklist is queryable.** Once synthesized as a resource, the checklist participates in the SDK like any other resource — `browse.resources({ entityType: 'Checklist' })` lists prior runs; `mark.assist` can annotate items as completed; `bind.body` can link items to their resolution.
+- **The checklist is queryable.** Once synthesized as a resource, the checklist participates in the SDK like any other resource — `browse.resources({ entityType: 'Checklist' })` lists prior runs; `mark.delegate` can annotate items as completed; `bind.body` can link items to their resolution.
 - **Provenance is bidirectional.** Each row carries a markdown link to its source resource. The source annotation, in turn, exists in the KB independently (a comment-motivation annotation pointing at the paragraph) — so "what's pending in this matter?" can be queried from either end.
 - **Re-running is cheap if you skip `INCLUDE_GATHER`.** Without gather, the rows have no excerpt — but the link back to the source paragraph still works, so a click-through gets the user there.

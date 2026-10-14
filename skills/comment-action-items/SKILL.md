@@ -10,14 +10,14 @@ You are helping the user surface the *pending work* in a legal matter — the it
 
 ## What it does
 
-For each markdown corpus resource (or one specific resource), runs `mark.assist({ motivation: 'commenting', instructions: ... })`. Each commenting annotation captures one of: an action item, a deadline, a required follow-up, a verification request, an outstanding signature, or any "we need to confirm / verify / decide" sentence.
+For each markdown corpus resource (or one specific resource), runs `mark.delegate({ motivation: 'commenting', instructions: ... })`. Each commenting annotation captures one of: an action item, a deadline, a required follow-up, a verification request, an outstanding signature, or any "we need to confirm / verify / decide" sentence.
 
 PDFs are skipped.
 
 ## SDK verbs
 
 - `browse.resources` — find markdown corpus targets
-- `mark.assist({ motivation: 'commenting', instructions: ... })`
+- `mark.delegate({ motivation: 'commenting', instructions: ... })`
 
 ## Parameters
 
@@ -39,11 +39,11 @@ HOST_ADDR=$(container run --rm node:24-alpine sh -c "ip route | awk '/default/{p
 
 container run --rm -v "$(pwd):/work" -w /work \
   -e SEMIONT_API_URL=http://${HOST_ADDR}:4000 \
-  -e SEMIONT_USER_EMAIL=admin@example.com \
-  -e SEMIONT_USER_PASSWORD=<your-password> \
   node:24-alpine \
-  sh -c 'npm install --silent --no-fund @semiont/sdk tsx && npx tsx skills/comment-action-items/script.ts'
+  sh -c 'npm ci --no-audit --no-fund && npx tsx skills/comment-action-items/script.ts'
 ```
+
+The script prints an address: open it in a browser and approve the sign-in. [Signing in](https://github.com/The-AI-Alliance/semiont/blob/main/docs/builder/SIGN-IN.md) has the other ways a script can sign in.
 
 Add `-e SEMIONT_INTERACTIVE=1 -it` for the confirm prompt.
 

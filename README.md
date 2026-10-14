@@ -31,7 +31,7 @@ This repo ships eleven skills that build a layered legal-review KB on top of the
 | [`resolve-descriptive-references`](skills/resolve-descriptive-references/SKILL.md) | Resolve descriptive references to Party resources; synthesize an Investigation resource documenting the audit trail. |
 | [`build-section-graph`](skills/build-section-graph/SKILL.md) | Decompose a structured legal document into per-section LegalSection resources; bind cross-document section references. |
 | [`extract-obligations`](skills/extract-obligations/SKILL.md) | Tag every obligation; synthesize Obligation resources with structured fields (obligor, obligee, trigger, deadline). |
-| [`build-party-graph`](skills/build-party-graph/SKILL.md) | Promote Person/Organization mentions to canonical Party resources; extract inter-party relationships. |
+| [`build-party-graph`](skills/build-party-graph/SKILL.md) | Promote Person/Organization mentions to canonical Party resources. |
 | [`build-due-diligence-checklist`](skills/build-due-diligence-checklist/SKILL.md) | Aggregate commenting annotations into a single Checklist resource — the matter's living front page. |
 | [`redline-tracker`](skills/redline-tracker/SKILL.md) | Track contract evolution: ingest a new version, link to prior, run section-aware diff, yield VersionDelta resources. |
 
