@@ -17,6 +17,7 @@ import {
   SemiontSession,
   InMemorySessionStorage,
   httpKb,
+  getBodySource,
   getEntityTypes,
   type AnnotationId,
   type ResourceId,
@@ -81,9 +82,7 @@ async function main(): Promise<void> {
         const tags = getEntityTypes(ann);
         const partyTags = tags.filter((t) => PARTY_ENTITY_TYPES.has(t));
         if (partyTags.length === 0) continue;
-        const alreadyBound = bodies.some(
-          (b) => b.type === 'SpecificResource' && b.purpose === 'linking',
-        );
+        const alreadyBound = getBodySource(ann.body) !== null;
         const target = ann.target;
         const selectors =
           typeof target === 'string' || !target.selector
