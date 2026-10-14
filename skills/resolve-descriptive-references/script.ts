@@ -14,10 +14,8 @@
 import {
   SemiontSession,
   InMemorySessionStorage,
-  type KbTarget,
-  resourceId as ridBrand,
+  httpKb,
   type AnnotationId,
-  type GatheredContext,
   type ResourceId,
 } from '@semiont/sdk';
 import { confirm, isInteractive, close as closeInteractive } from '../../src/interactive.js';
@@ -80,17 +78,21 @@ interface ResolutionRecord {
 
 
 async function main(): Promise<void> {
-  const baseUrl = process.env.SEMIONT_API_URL ?? 'http://localhost:4000';
-  const email = process.env.SEMIONT_USER_EMAIL!;
-  const password = process.env.SEMIONT_USER_PASSWORD!;
-  const u = new URL(baseUrl);
-  const kb: KbTarget = {
-    id: 'legal-resolve-descriptive-references',
-    label: 'legal resolve-descriptive-references',
-    email,
-    endpoint: { kind: 'http', host: u.hostname, port: Number(u.port) || 4000, protocol: u.protocol.replace(':', '') as 'http' | 'https' },
-  };
-  const session = await SemiontSession.signInHttp({ kb, storage: new InMemorySessionStorage(), baseUrl, email, password });
+  const gateway = new URL(process.env.SEMIONT_API_URL ?? 'http://localhost:4000');
+  const session = await SemiontSession.signInDevice({
+    kb: httpKb({
+      id: 'legal-resolve-descriptive-references',
+      label: 'legal resolve-descriptive-references',
+      host: gateway.hostname,
+      port: Number(gateway.port) || 4000,
+      protocol: gateway.protocol === 'https:' ? 'https' : 'http',
+    }),
+    storage: new InMemorySessionStorage(),
+    onCode: ({ verificationUri, verificationUriComplete, userCode }) => {
+      console.error(`Approve this script at ${verificationUriComplete ?? verificationUri}`);
+      if (!verificationUriComplete) console.error(`Code: ${userCode}`);
+    },
+  });
   const semiont = session.client;
 
   try {
@@ -120,7 +122,7 @@ async function main(): Promise<void> {
     // annotations are not).
     const descriptive: DescriptiveAnno[] = [];
     for (const r of markdownResources) {
-      const rId = ridBrand(r['@id']);
+      const rId = r['@id'];
       const annotations = await semiont.browse.annotations(rId).fresh();
       for (const ann of annotations) {
         if (ann.motivation !== 'linking') continue;
@@ -184,9 +186,7 @@ async function main(): Promise<void> {
     let skipped = 0;
 
     for (const a of descriptive) {
-      const gather = await semiont.gather.annotation(a.rId, a.annId, { contextWindow: 1500 });
-      if (!('response' in gather)) continue;
-      const context = gather.response as GatheredContext;
+      const { response: context } = await semiont.gather.annotation(a.rId, a.annId, { contextWindow: 1500 });
       const matchResult = await semiont.match.search(a.rId, a.annId, context, {
         limit: 5,
         useSemanticScoring: true,
@@ -194,7 +194,7 @@ async function main(): Promise<void> {
       const candidates = matchResult.response.map((c) => ({
         name: c.name as string,
         score: (c.score ?? 0) as number,
-        id: c['@id'] as string,
+        id: c['@id'],
       }));
       const top = candidates[0];
 

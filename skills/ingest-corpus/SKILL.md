@@ -43,11 +43,11 @@ HOST_ADDR=$(container run --rm node:24-alpine sh -c "ip route | awk '/default/{p
 
 container run --rm -v "$(pwd):/work" -w /work \
   -e SEMIONT_API_URL=http://${HOST_ADDR}:4000 \
-  -e SEMIONT_USER_EMAIL=admin@example.com \
-  -e SEMIONT_USER_PASSWORD=<your-password> \
   node:24-alpine \
-  sh -c 'npm install --silent --no-fund @semiont/sdk tsx && npx tsx skills/ingest-corpus/script.ts'
+  sh -c 'npm ci --no-audit --no-fund && npx tsx skills/ingest-corpus/script.ts'
 ```
+
+The script prints an address: open it in a browser and approve the sign-in. [Signing in](https://github.com/The-AI-Alliance/semiont/blob/main/docs/builder/SIGN-IN.md) has the other ways a script can sign in.
 
 Add `-e SEMIONT_INTERACTIVE=1 -it` to enable the confirm prompt.
 
@@ -62,5 +62,5 @@ Per-file resource id and entity types. Note these — downstream skills (`mark-n
 ## Guidance for the AI assistant
 
 - **Re-running creates duplicates.** No deduplication. Use `semiont.browse.resources({ search: '<title>' })` to check before re-running, or restart the stack to start fresh.
-- **PDFs are cataloged but not analyzed.** `mark.assist` requires `text/markdown` or `text/plain`. Tier-1 mark skills filter on media type and skip PDFs automatically. The markdown subset of the corpus carries the analytical workload.
+- **PDFs are cataloged but not analyzed.** `mark.delegate` requires `text/markdown` or `text/plain`. Tier-1 mark skills filter on media type and skip PDFs automatically. The markdown subset of the corpus carries the analytical workload.
 - **Pre-curated context articles survive.** Drop a markdown file into `context/`, `curated/`, or `generated/` and skill 1 ingests it as a `LegalContext` resource on day 1; downstream synthesis skills `match.search` against existing `LegalContext` resources before creating new ones.

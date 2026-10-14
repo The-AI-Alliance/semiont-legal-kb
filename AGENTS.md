@@ -18,10 +18,10 @@ If you're an AI assistant working in this repo, this file is your orientation. T
 | Skill | What it does | New SDK verbs |
 |---|---|---|
 | [`ingest-corpus`](skills/ingest-corpus/) | Walk the repo, declare the KB's entity-type vocabulary, create one resource per file | `frame.addEntityTypes`, `yield.resource` |
-| [`mark-named-entities`](skills/mark-named-entities/) | Detect Person, Organization, Address, Date, MonetaryValue, LegalSection, LegalDocument, LegalTerm spans — both formal mentions and descriptive references ("the landlord", "the vendor") | `mark.assist` (linking, optionally with `includeDescriptiveReferences`) |
-| [`assess-contract-risks`](skills/assess-contract-risks/) | Flag risk-prone clauses (asymmetric provisions, vague language, missing definitions) | `mark.assist` (assessing) |
-| [`comment-action-items`](skills/comment-action-items/) | Surface action items, deadlines, required follow-ups | `mark.assist` (commenting) |
-| [`build-party-graph`](skills/build-party-graph/) | Promote Person/Organization mentions to Party resources, encode inter-party relationships | `+ yield.fromContext`, `bind.body`, `match.search` |
+| [`mark-named-entities`](skills/mark-named-entities/) | Detect Person, Organization, Address, Date, MonetaryValue, LegalSection, LegalDocument, LegalTerm spans — both formal mentions and descriptive references ("the landlord", "the vendor") | `mark.delegate` (linking, optionally with `includeDescriptiveReferences`) |
+| [`assess-contract-risks`](skills/assess-contract-risks/) | Flag risk-prone clauses (asymmetric provisions, vague language, missing definitions) | `mark.delegate` (assessing) |
+| [`comment-action-items`](skills/comment-action-items/) | Surface action items, deadlines, required follow-ups | `mark.delegate` (commenting) |
+| [`build-party-graph`](skills/build-party-graph/) | Promote Person/Organization mentions to Party resources | `+ yield.delegate`, `bind.body`, `match.search` |
 | [`resolve-descriptive-references`](skills/resolve-descriptive-references/) | Walk descriptive references, resolve where evidence exists, synthesize an Investigation resource | `+ gather.annotation` |
 | [`build-section-graph`](skills/build-section-graph/) | Decompose contracts into per-section LegalSection resources, bind cross-document references | `+ yield.resource` per section |
 | [`extract-obligations`](skills/extract-obligations/) | Tag every duty / covenant / restriction; synthesize an Obligation resource per | full pipeline composition |
@@ -61,7 +61,7 @@ Drop a markdown file into `context/`, `curated/`, or `generated/` and skill 1 in
 The seeded corpus contains a markdown subdirectory whose documents talk about a property whose owner is named in one document but referred to descriptively elsewhere ("the owner of the property", "the landlord"). After running:
 
 1. `ingest-corpus` → resources for each document.
-2. `mark-named-entities` → annotations on every entity mention — the formal organization names AND the descriptive references ("the owner of …", "the landlord") — in one `mark.assist` pass.
+2. `mark-named-entities` → annotations on every entity mention — the formal organization names AND the descriptive references ("the owner of …", "the landlord") — in one `mark.delegate` pass.
 3. `build-party-graph` → Party resources for every distinct named entity.
 4. `resolve-descriptive-references` → walks each descriptive-reference annotation, gathers context, matches against Party resources, binds where evidence supports it, and produces an **Investigation resource** narrating the resolution path.
 
@@ -111,8 +111,8 @@ Skills are parameterized in three tiers.
 | Var | Purpose |
 |---|---|
 | `SEMIONT_API_URL` | Gateway URL (default `http://localhost:4000`) |
-| `SEMIONT_USER_EMAIL` | Authenticating user |
-| `SEMIONT_USER_PASSWORD` | Authenticating user's password |
+
+A skill signs in by the device grant: it prints an address, and a person approves in a browser. No password passes through the script. [Signing in](https://github.com/The-AI-Alliance/semiont/blob/main/docs/builder/SIGN-IN.md) has the other ways a script can sign in.
 
 ### Tier 2 — skill-invocation parameters
 
@@ -128,14 +128,14 @@ Tier-2 env vars can pre-answer tier-3 prompts (e.g., `MATCH_THRESHOLD=25` pre-an
 
 ## A note on PDFs
 
-`mark.assist` operates on `text/markdown` and `text/plain`. PDFs are ingested by skill 1 as `application/pdf` resources — they're cataloged and visible in the KB but downstream `mark-*` skills skip them. The markdown subset of the corpus carries the analytical workload. PDF-to-markdown conversion (via `pdftotext`, `pandoc`, or a containerized `tika`) can be added to skill 1 in a future enhancement when a skill genuinely needs PDF body content.
+`mark.delegate` operates on `text/markdown` and `text/plain`. PDFs are ingested by skill 1 as `application/pdf` resources — they're cataloged and visible in the KB but downstream `mark-*` skills skip them. The markdown subset of the corpus carries the analytical workload. PDF-to-markdown conversion (via `pdftotext`, `pandoc`, or a containerized `tika`) can be added to skill 1 in a future enhancement when a skill genuinely needs PDF body content.
 
 ## Background reading
 
 | Where | What |
 |---|---|
 | [`@semiont/sdk` README](https://github.com/The-AI-Alliance/semiont/tree/main/packages/sdk) | The TypeScript surface — eight verbs (frame, yield, mark, match, bind, gather, browse, beckon) plus admin/auth/job. |
-| [SDK Usage docs](https://github.com/The-AI-Alliance/semiont/tree/main/packages/sdk/docs) | Cache semantics, reactive model, state units, error handling. |
+| [SDK Usage docs](https://github.com/The-AI-Alliance/semiont/blob/main/docs/builder/Usage.md) | Cache semantics, reactive model, state units, error handling. |
 | [Semiont protocol docs](https://github.com/The-AI-Alliance/semiont/tree/main/docs/protocol) | The eight-flow framing. |
-| [Semiont protocol skills](https://github.com/The-AI-Alliance/semiont/tree/main/docs/protocol/skills) | Reference skill packs — `semiont-wiki`, `semiont-comment`, `semiont-highlight`, etc. |
+| [Semiont protocol skills](https://github.com/The-AI-Alliance/semiont/tree/main/docs/builder/skills) | Reference skill packs — `semiont-wiki`, `semiont-comment`, `semiont-highlight`, etc. |
 | [.plans/LEGAL-SKILLS.md](.plans/LEGAL-SKILLS.md) | The full design plan for these skills. |

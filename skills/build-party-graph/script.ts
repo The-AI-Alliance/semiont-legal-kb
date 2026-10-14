@@ -1,13 +1,14 @@
 /**
  * build-party-graph — promote Person/Organization mentions to canonical
- * Party resources, then extract inter-party relationships.
+ * Party resources.
  *
- * Pass 1: cluster + match + bind / yield.fromContext + bind, mirroring
- * the gutenberg-kb's build-character-articles pattern but using
- * yield.fromContext (so Party body content is grounded in the source
- * paragraph the model gathers, not a hand-built stub).
+ * Cluster + match + bind / yield.delegate + bind, mirroring the
+ * gutenberg-kb's build-character-articles pattern but using yield.delegate
+ * (so Party body content is grounded in the source paragraph the model
+ * gathers, not a hand-built stub).
  *
- * Pass 2: mark.assist relationship-extraction pass over the corpus.
+ * Relationships between parties are not found by a job: SKILL.md says how
+ * they are recorded.
  *
  * Usage: tsx skills/build-party-graph/script.ts [--interactive]
  */
@@ -15,52 +16,18 @@
 import {
   SemiontSession,
   InMemorySessionStorage,
-  type KbTarget,
-  entityType,
-  resourceId as ridBrand,
+  httpKb,
+  getBodySource,
+  getEntityTypes,
   type AnnotationId,
-  type GatheredContext,
   type ResourceId,
 } from '@semiont/sdk';
 import { confirm, isInteractive, close as closeInteractive } from '../../src/interactive.js';
-import { createdCount } from '../../src/mark-result.js';
 import { getMediaType } from '../../src/media-type.js';
 
 const MATCH_THRESHOLD = Number(process.env.MATCH_THRESHOLD ?? 30);
-const SKIP_RELATIONSHIP_PASS = process.env.SKIP_RELATIONSHIP_PASS === '1';
 
 const PARTY_ENTITY_TYPES = new Set(['Person', 'Organization']);
-
-// mark.assist with motivation 'linking' requires a non-empty entityTypes
-// array (SDK validation). Pass 2's relationship-extraction tagging uses the
-// standard legal entity-type list; override with the RELATIONSHIP_ENTITY_TYPES
-// env var if you want to scope the relationship pass to a different
-// vocabulary.
-const RELATIONSHIP_ENTITY_TYPES = (
-  process.env.RELATIONSHIP_ENTITY_TYPES ??
-  'Person,Organization,Address,Date,MonetaryValue,LegalSection,LegalDocument,LegalTerm'
-)
-  .split(',')
-  .map((t) => entityType(t.trim()));
-
-const RELATIONSHIP_INSTRUCTIONS = `
-For pairs of named parties (Person ↔ Person, Person ↔ Organization, or Organization ↔ Organization)
-in this document, identify any explicit relationship between them and tag the span where the
-relationship is established. Use a single tag value naming the relationship type, drawn from the
-following vocabulary (extend as needed):
-  - counterparty       (one party is the other's counterparty under a contract)
-  - lessor / lessee    (landlord ↔ tenant)
-  - principal / agent
-  - employer / employee
-  - parent / subsidiary
-  - attorney / client
-  - fiduciary / beneficiary
-  - role-at-org        (a Person serves a role at a named Organization)
-  - represented-by     (party-to-attorney representation)
-Only tag relationships supported by explicit language in the document. Do not infer relationships
-that aren't on the page.
-`.trim();
-
 
 function slugify(text: string): string {
   return text.toLowerCase().replace(/\s+/g, '-').replace(/[^a-z0-9-]/g, '');
@@ -75,17 +42,21 @@ interface PartyAnno {
 }
 
 async function main(): Promise<void> {
-  const baseUrl = process.env.SEMIONT_API_URL ?? 'http://localhost:4000';
-  const email = process.env.SEMIONT_USER_EMAIL!;
-  const password = process.env.SEMIONT_USER_PASSWORD!;
-  const u = new URL(baseUrl);
-  const kb: KbTarget = {
-    id: 'legal-build-party-graph',
-    label: 'legal build-party-graph',
-    email,
-    endpoint: { kind: 'http', host: u.hostname, port: Number(u.port) || 4000, protocol: u.protocol.replace(':', '') as 'http' | 'https' },
-  };
-  const session = await SemiontSession.signInHttp({ kb, storage: new InMemorySessionStorage(), baseUrl, email, password });
+  const gateway = new URL(process.env.SEMIONT_API_URL ?? 'http://localhost:4000');
+  const session = await SemiontSession.signInDevice({
+    kb: httpKb({
+      id: 'legal-build-party-graph',
+      label: 'legal build-party-graph',
+      host: gateway.hostname,
+      port: Number(gateway.port) || 4000,
+      protocol: gateway.protocol === 'https:' ? 'https' : 'http',
+    }),
+    storage: new InMemorySessionStorage(),
+    onCode: ({ verificationUri, verificationUriComplete, userCode }) => {
+      console.error(`Approve this script at ${verificationUriComplete ?? verificationUri}`);
+      if (!verificationUriComplete) console.error(`Code: ${userCode}`);
+    },
+  });
   const semiont = session.client;
 
   try {
@@ -101,25 +72,17 @@ async function main(): Promise<void> {
       return;
     }
 
-    // ---------- Pass 1: collect Person/Organization annotations ----------
+    // ---------- Collect Person/Organization annotations ----------
     const partyAnnotations: PartyAnno[] = [];
     for (const r of markdownResources) {
-      const rId = ridBrand(r['@id']);
+      const rId = r['@id'];
       const annotations = await semiont.browse.annotations(rId).fresh();
       for (const ann of annotations) {
         if (ann.motivation !== 'linking') continue;
-        const bodies = Array.isArray(ann.body) ? ann.body : ann.body ? [ann.body] : [];
-        const tags = bodies
-          .flatMap((b) =>
-            b.type === 'TextualBody' && b.purpose === 'tagging'
-              ? (Array.isArray(b.value) ? b.value : [b.value])
-              : [],
-          );
-        const partyTags = tags.filter((t: string) => PARTY_ENTITY_TYPES.has(t));
+        const tags = getEntityTypes(ann);
+        const partyTags = tags.filter((t) => PARTY_ENTITY_TYPES.has(t));
         if (partyTags.length === 0) continue;
-        const alreadyBound = bodies.some(
-          (b) => b.type === 'SpecificResource' && b.purpose === 'linking',
-        );
+        const alreadyBound = getBodySource(ann.body) !== null;
         const target = ann.target;
         const selectors =
           typeof target === 'string' || !target.selector
@@ -175,14 +138,14 @@ async function main(): Promise<void> {
     );
 
     if (clusters.size === 0) {
-      console.log('Nothing to promote. Skipping pass 1.');
+      console.log('Nothing to promote.');
     } else {
       const proceed = await confirm(
         'Proceed to match each cluster against existing Party resources, synthesize new ones where needed, and bind annotations?',
         true,
       );
       if (!proceed) {
-        console.log('Aborted before pass 1.');
+        console.log('Aborted.');
         closeInteractive();
         return;
       }
@@ -195,11 +158,9 @@ async function main(): Promise<void> {
         const sample = anns[0];
         if (!sample) continue;
 
-        const gather = await semiont.gather.annotation(sample.rId, sample.annId, {
+        const { response: context } = await semiont.gather.annotation(sample.rId, sample.annId, {
           contextWindow: 1500,
         });
-        if (!('response' in gather)) continue;
-        const context = gather.response as GatheredContext;
 
         const matchResult = await semiont.match.search(sample.rId, sample.annId, context, {
           limit: 5,
@@ -207,7 +168,7 @@ async function main(): Promise<void> {
         });
         const top = matchResult.response[0];
 
-        let targetResourceId: string;
+        let targetResourceId: ResourceId;
         if (top && (top.score ?? 0) >= MATCH_THRESHOLD) {
           targetResourceId = top['@id'];
           console.log(`  ↪ "${sample.text}" → ${top.name} (existing, score ${top.score})`);
@@ -225,21 +186,20 @@ async function main(): Promise<void> {
           }
 
           const partyType = sample.tags.includes('Organization') ? 'Organization' : 'Person';
-          const yieldEvent = await semiont.yield.fromContext(context, {
+          const yieldEvent = await semiont.yield.delegate({
+            context,
             title: sample.text,
             storageUri: `file://generated/party-${slugify(sample.text)}.md`,
             entityTypes: ['Party', partyType],
           });
 
-          if (yieldEvent.kind !== 'complete') {
-            console.warn(`  unexpected yield event kind for "${sample.text}": ${yieldEvent.kind}`);
+          if (!yieldEvent.result || !('resourceId' in yieldEvent.result)) {
+            console.warn(`  the generation made no resource for "${sample.text}"`);
             continue;
           }
-          const newResourceId = (
-            yieldEvent.data.result as { resourceId?: string } | undefined
-          )?.resourceId;
+          const newResourceId = yieldEvent.result && 'resourceId' in yieldEvent.result ? yieldEvent.result.resourceId : undefined;
           if (!newResourceId) {
-            console.warn(`  yield.fromContext gave no resourceId for "${sample.text}"`);
+            console.warn(`  yield.delegate gave no resourceId for "${sample.text}"`);
             continue;
           }
 
@@ -260,41 +220,11 @@ async function main(): Promise<void> {
       }
 
       console.log(
-        `\nPass 1 done. Bound ${bound} annotations across ${clusters.size} party clusters; ` +
+        `\nDone. Bound ${bound} annotations across ${clusters.size} party clusters; ` +
           `${synthesized} new Party resources synthesized; ${skipped} skipped.`,
       );
     }
 
-    // ---------- Pass 2: relationship extraction ----------
-    if (SKIP_RELATIONSHIP_PASS) {
-      console.log('Skipping pass 2 (relationship extraction) — SKIP_RELATIONSHIP_PASS=1.');
-      closeInteractive();
-      return;
-    }
-
-    console.log(
-      `\nPass 2: relationship extraction across ${markdownResources.length} markdown resource(s).`,
-    );
-    const proceedRel = await confirm('Proceed?', true);
-    if (!proceedRel) {
-      console.log('Aborted before pass 2.');
-      closeInteractive();
-      return;
-    }
-
-    let totalRel = 0;
-    for (const r of markdownResources) {
-      const rId = ridBrand(r['@id']);
-      const progress = await semiont.mark.assist(rId, 'linking', {
-        entityTypes: RELATIONSHIP_ENTITY_TYPES,
-        instructions: RELATIONSHIP_INSTRUCTIONS,
-      });
-      const n = createdCount(progress);
-      totalRel += n;
-      console.log(`  ${rId}: ${n} relationship annotations`);
-    }
-
-    console.log(`\nPass 2 done. Created ${totalRel} relationship annotations across the corpus.`);
     closeInteractive();
   } finally {
     await session.dispose();
