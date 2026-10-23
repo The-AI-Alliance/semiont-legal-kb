@@ -1,0 +1,12 @@
+project:
+  name: "Legal Knowledge Base (Synthetic Documents)"
+
+git:
+  sync: true
+
+site:
+  # Permanent did:web identity for everything this KB mints (stamped into the
+  # committed event log). Names the repo, not a deployment — a committed
+  # literal, never a machine address.
+  domain: "the-ai-alliance.github.io:semiont-legal-kb"
+  siteName: "Legal Knowledge Base (Synthetic Documents)"
