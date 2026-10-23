@@ -1,6 +1,6 @@
 {
   "dependencies": {
-    "@semiont/sdk": "^0.6.13",
+    "@semiont/sdk": "^0.7.0",
     "@types/node": "^26.4.0",
     "html-to-text": "^10.0.0",
     "tsx": "^4.23.15",

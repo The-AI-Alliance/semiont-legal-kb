@@ -51,7 +51,7 @@ async function main(): Promise<void> {
   const newVersionName = process.env.NEW_VERSION_NAME ?? nameFromFilename(filename);
 
   const gateway = new URL(process.env.SEMIONT_API_URL ?? 'http://localhost:4000');
-  const session = await SemiontSession.signInDevice({
+  const opened = await SemiontSession.signInDevice({
     kb: httpKb({
       id: 'legal-redline-tracker',
       label: 'legal redline-tracker',
@@ -65,7 +65,7 @@ async function main(): Promise<void> {
       if (!verificationUriComplete) console.error(`Code: ${userCode}`);
     },
   });
-  const semiont = session.client;
+  const semiont = opened.session.client;
 
   try {
     // Step 1: fetch prior body, read new body.
@@ -169,7 +169,7 @@ async function main(): Promise<void> {
     );
     closeInteractive();
   } finally {
-    await session.dispose();
+    opened.dispose();
   }
 }
 

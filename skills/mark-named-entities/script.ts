@@ -49,7 +49,7 @@ async function main(): Promise<void> {
   const explicitResourceId = args[0];
 
   const gateway = new URL(process.env.SEMIONT_API_URL ?? 'http://localhost:4000');
-  const session = await SemiontSession.signInDevice({
+  const opened = await SemiontSession.signInDevice({
     kb: httpKb({
       id: 'legal-mark-named-entities',
       label: 'legal mark-named-entities',
@@ -63,7 +63,7 @@ async function main(): Promise<void> {
       if (!verificationUriComplete) console.error(`Code: ${userCode}`);
     },
   });
-  const semiont = session.client;
+  const semiont = opened.session.client;
 
   try {
     // Always fetch the resource list to enforce the text-only mediaType
@@ -131,7 +131,7 @@ async function main(): Promise<void> {
     console.log(`\nDone. Created ${totalCreated} entity annotations.`);
     closeInteractive();
   } finally {
-    await session.dispose();
+    opened.dispose();
   }
 }
 
