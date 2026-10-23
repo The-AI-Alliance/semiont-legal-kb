@@ -42,7 +42,7 @@ async function main(): Promise<void> {
   const contractId = ridBrand(contractIdArg);
 
   const gateway = new URL(process.env.SEMIONT_API_URL ?? 'http://localhost:4000');
-  const session = await SemiontSession.signInDevice({
+  const opened = await SemiontSession.signInDevice({
     kb: httpKb({
       id: 'legal-build-section-graph',
       label: 'legal build-section-graph',
@@ -56,7 +56,7 @@ async function main(): Promise<void> {
       if (!verificationUriComplete) console.error(`Code: ${userCode}`);
     },
   });
-  const semiont = session.client;
+  const semiont = opened.session.client;
 
   try {
     // Fetch the contract body and split into sections.
@@ -188,7 +188,7 @@ async function main(): Promise<void> {
     );
     closeInteractive();
   } finally {
-    await session.dispose();
+    opened.dispose();
   }
 }
 
