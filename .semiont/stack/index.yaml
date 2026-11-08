@@ -8,7 +8,6 @@ spec:
   graph:
     type: neo4j
     username: neo4j
-    database: neo4j
     image: neo4j:5.26.28-community
     resources: { limits: { memory: 2G } }
   vectors:
