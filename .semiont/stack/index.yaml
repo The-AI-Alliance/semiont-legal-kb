@@ -13,7 +13,7 @@ spec:
   vectors:
     type: qdrant
     image: qdrant/qdrant:v1.19.1
-    resources: { limits: { memory: 2G } }
+    resources: { limits: { memory: 1G } }
   embedding:
     type: ollama
     model: nomic-embed-text
